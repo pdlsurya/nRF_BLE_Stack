@@ -67,6 +67,12 @@ Build the example with:
 make -C examples/custom_ble_stack_demo -j4
 ```
 
+Note: the bundled example is currently written for the nRF52840 dongle and uses
+the included `debug_log` backend over the dongle's built-in USB interface. Other
+nRF devices may not provide the same USB logging path, so their applications
+should replace that example logging backend with whatever output is available on
+the target, such as UART, RTT, or another board-specific logger.
+
 ## Typical Usage
 
 ```c
