@@ -63,11 +63,11 @@ SRC_FILES += \
   main.c \
   $(SDK_ROOT)/modules/nrfx/mdk/system_nrf52840.c \
   $(DEBUG_LOG_DIR)/debug_log.c\
-  $(BLE_STACK_DIR)/radio/radio_driver.c\
-  $(BLE_STACK_DIR)/core/ble_runtime.c\
-  $(BLE_STACK_DIR)/core/ble_controller.c\
-  $(BLE_STACK_DIR)/core/ble_stack.c\
-  $(BLE_STACK_DIR)/gatt/ble_gatt_server.c
+  $(BLE_STACK_DIR)/stack/radio/radio_driver.c\
+  $(BLE_STACK_DIR)/stack/core/ble_runtime.c\
+  $(BLE_STACK_DIR)/stack/core/ble_controller.c\
+  $(BLE_STACK_DIR)/stack/core/ble_stack.c\
+  $(BLE_STACK_DIR)/stack/gatt/ble_gatt_server.c
 
 
 # Include folders common to all targets
@@ -76,10 +76,10 @@ INC_FOLDERS += \
   $(SDK_ROOT)/modules/nrfx/mdk \
   $(SDK_ROOT)/components/libraries/scheduler \
   $(PROJ_DIR) \
-  $(BLE_STACK_DIR)/include \
-  $(BLE_STACK_DIR)/gatt \
-  $(BLE_STACK_DIR)/core \
-  $(BLE_STACK_DIR)/radio \
+  $(BLE_STACK_DIR)/stack/include \
+  $(BLE_STACK_DIR)/stack/gatt \
+  $(BLE_STACK_DIR)/stack/core \
+  $(BLE_STACK_DIR)/stack/radio \
   $(SDK_ROOT)/components/libraries/timer \
   $(SDK_ROOT)/components/libraries/fifo \
   $(SDK_ROOT)/components/libraries/strerror \

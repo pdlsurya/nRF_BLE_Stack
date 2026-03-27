@@ -19,13 +19,13 @@ deferred application callbacks.
 
 ## Repository Layout
 
-- `include/nrf_ble.h`
+- `stack/include/nrf_ble.h`
   Public BLE stack API
-- `core/`
+- `stack/core/`
   Stack entry points, runtime state, controller flow, and deferred event delivery
-- `gatt/`
+- `stack/gatt/`
   ATT/GATT database build and request handling
-- `radio/`
+- `stack/radio/`
   nRF radio peripheral abstraction used by the controller
 - `examples/custom_ble_stack_demo/`
   Example peripheral application using the stack
@@ -48,7 +48,7 @@ Main application-facing entry points:
 - `ble_notify_characteristic()`
 - `ble_disconnect()`
 
-See [nrf_ble.h](include/nrf_ble.h) for the full public interface.
+See [nrf_ble.h](stack/include/nrf_ble.h) for the full public interface.
 
 ## Example
 
