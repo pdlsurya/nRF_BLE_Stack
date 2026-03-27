@@ -146,7 +146,7 @@ void TIMER2_IRQHandler(void)
             if (((uint32_t)m_link.missed_interval_count * (uint32_t)m_link.conn_interval_ms) >=
                 (uint32_t)m_link.supervision_timeout_ms)
             {
-                (void)ble_evt_notify(BLE_EVT_SUPERVISION_TIMEOUT);
+                (void)ble_evt_notify_gap(BLE_GAP_EVT_SUPERVISION_TIMEOUT);
                 controller_disconnect_internal();
                 return;
             }
@@ -422,7 +422,7 @@ void controller_disconnect_internal(void)
 
     if (was_connected)
     {
-        (void)ble_evt_notify(BLE_EVT_DISCONNECTED);
+        (void)ble_evt_notify_gap(BLE_GAP_EVT_DISCONNECTED);
     }
 }
 
@@ -439,7 +439,7 @@ static uint16_t ll_control_process(const uint8_t *p_payload, uint8_t len, uint8_
     switch (opcode)
     {
     case BLE_LL_CTRL_CONN_UPDATE_IND:
-        (void)ble_evt_notify(BLE_EVT_CONN_UPDATE_IND);
+        (void)ble_evt_notify_gap(BLE_GAP_EVT_CONN_UPDATE_IND);
         return 0U;
 
     case BLE_LL_CTRL_CHANNEL_MAP_IND:
@@ -482,7 +482,7 @@ static uint16_t ll_control_process(const uint8_t *p_payload, uint8_t len, uint8_
         return 3U;
 
     case BLE_LL_CTRL_TERMINATE_IND:
-        (void)ble_evt_notify(BLE_EVT_TERMINATE_IND);
+        (void)ble_evt_notify_gap(BLE_GAP_EVT_TERMINATE_IND);
         controller_disconnect_internal();
         return 0U;
 
@@ -689,7 +689,7 @@ static void controller_apply_connect_request(const ble_connect_req_pdu_t *p_req)
     first_event_delay_us = (p_req->ll_data.win_offset == 0U) ? 2000U : ((uint32_t)p_req->ll_data.win_offset * 1250U);
     controller_conn_timer_start(first_event_delay_us);
 
-    (void)ble_evt_notify(BLE_EVT_CONNECTED);
+    (void)ble_evt_notify_gap(BLE_GAP_EVT_CONNECTED);
 }
 
 static void radio_handle_connected_packet(void)

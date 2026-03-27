@@ -53,9 +53,9 @@ static void ble_evt_handler(const ble_evt_t *p_evt)
 {
     switch (p_evt->evt_type)
     {
-    case BLE_EVT_CONNECTED:
+    case BLE_GAP_EVT_CONNECTED:
         break;
-    case BLE_EVT_DISCONNECTED:
+    case BLE_GAP_EVT_DISCONNECTED:
         ble_start_advertising();
         break;
     default:

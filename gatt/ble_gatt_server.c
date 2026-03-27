@@ -578,20 +578,20 @@ static uint16_t att_handle_write_req(uint16_t handle, const uint8_t *p_data, uin
     if (p_char_runtime != NULL)
     {
         p_char_runtime->notifications_enabled = ((p_char_runtime->cccd_value[0] & 0x01U) != 0U);
-        (void)ble_evt_notify_gatt(p_char_runtime->notifications_enabled ? BLE_GATT_EVT_NOTIFY_ENABLED
-                                                                        : BLE_GATT_EVT_NOTIFY_DISABLED,
-                                  p_char_runtime->p_characteristic,
-                                  p_char_runtime->cccd_value,
-                                  len,
-                                  p_char_runtime->notifications_enabled);
+        (void)ble_evt_notify_gatt_characteristic(p_char_runtime->notifications_enabled ? BLE_GATT_EVT_NOTIFY_ENABLED
+                                                                                       : BLE_GATT_EVT_NOTIFY_DISABLED,
+                                                 p_char_runtime->p_characteristic,
+                                                 p_char_runtime->cccd_value,
+                                                 len,
+                                                 p_char_runtime->notifications_enabled);
     }
     else if (p_attr->p_characteristic != NULL)
     {
-        (void)ble_evt_notify_gatt(BLE_GATT_EVT_WRITE,
-                                  p_attr->p_characteristic,
-                                  p_attr->p_value,
-                                  len,
-                                  false);
+        (void)ble_evt_notify_gatt_characteristic(BLE_GATT_EVT_WRITE,
+                                                 p_attr->p_characteristic,
+                                                 p_attr->p_value,
+                                                 len,
+                                                 false);
     }
 
     if (!with_rsp)
@@ -912,9 +912,9 @@ uint16_t ble_gatt_server_process_request(const uint8_t *p_att,
         }
         m_att_rsp[0] = BLE_ATT_OP_MTU_RSP;
         u16_encode(BLE_ATT_MTU_DEFAULT, &m_att_rsp[1]);
-        (void)ble_evt_notify_mtu_exchange(requested_mtu,
-                                          BLE_ATT_MTU_DEFAULT,
-                                          m_att_mtu);
+        (void)ble_evt_notify_gatt_mtu_exchange(requested_mtu,
+                                               BLE_ATT_MTU_DEFAULT,
+                                               m_att_mtu);
         rsp_len = 3U;
         break;
     }

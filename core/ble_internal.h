@@ -198,8 +198,9 @@ typedef struct
 
 typedef enum
 {
-    BLE_DEFERRED_EVT_KIND_BLE = 0,
+    BLE_DEFERRED_EVT_KIND_GAP = 0,
     BLE_DEFERRED_EVT_KIND_GATT,
+    BLE_DEFERRED_EVT_KIND_GATT_CHARACTERISTIC,
 } ble_deferred_evt_kind_t;
 
 typedef struct
@@ -207,7 +208,7 @@ typedef struct
     ble_deferred_evt_kind_t kind;
     union
     {
-        ble_evt_t ble;
+        ble_evt_t stack_evt;
         struct
         {
             ble_gatt_evt_type_t evt_type;
@@ -215,7 +216,7 @@ typedef struct
             uint8_t data[BLE_GATT_MAX_VALUE_LEN];
             uint16_t len;
             bool notifications_enabled;
-        } gatt;
+        } gatt_characteristic;
     } params;
 } ble_deferred_evt_t;
 
@@ -251,15 +252,15 @@ uint16_t u16_decode(const uint8_t *p_src);
 uint8_t adv_pdu_type_get(const ble_ll_adv_pdu_t *p_pdu);
 void u16_encode(uint16_t value, uint8_t *p_dst);
 void ble_evt_dispatch_init(void);
-bool ble_evt_notify(ble_evt_type_t evt_type);
-bool ble_evt_notify_gatt(ble_gatt_evt_type_t evt_type,
-                         ble_gatt_characteristic_t *p_characteristic,
-                         const uint8_t *p_data,
-                         uint16_t len,
-                         bool notifications_enabled);
-bool ble_evt_notify_mtu_exchange(uint16_t requested_mtu,
-                                 uint16_t response_mtu,
-                                 uint16_t effective_mtu);
+bool ble_evt_notify_gap(ble_evt_type_t evt_type);
+bool ble_evt_notify_gatt_characteristic(ble_gatt_evt_type_t evt_type,
+                                        ble_gatt_characteristic_t *p_characteristic,
+                                        const uint8_t *p_data,
+                                        uint16_t len,
+                                        bool notifications_enabled);
+bool ble_evt_notify_gatt_mtu_exchange(uint16_t requested_mtu,
+                                      uint16_t response_mtu,
+                                      uint16_t effective_mtu);
 void controller_load_identity_address(void);
 
 void controller_runtime_init(void);

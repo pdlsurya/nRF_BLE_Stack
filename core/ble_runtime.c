@@ -34,6 +34,7 @@ ble_diag_state_t m_diag;
 static ble_evt_dispatch_state_t m_evt_dispatch;
 
 static bool ble_evt_queue_push(const ble_deferred_evt_t *p_evt);
+static ble_deferred_evt_kind_t ble_stack_evt_kind_get(ble_evt_type_t evt_type);
 
 static uint32_t irq_lock(void)
 {
@@ -51,11 +52,6 @@ static void irq_unlock(uint32_t primask)
     }
 }
 
-static void ble_evt_raise(void)
-{
-    NVIC_SetPendingIRQ(SWI1_EGU1_IRQn);
-}
-
 static bool ble_evt_post(const ble_deferred_evt_t *p_evt)
 {
     if (!ble_evt_queue_push(p_evt))
@@ -63,7 +59,7 @@ static bool ble_evt_post(const ble_deferred_evt_t *p_evt)
         return false;
     }
 
-    ble_evt_raise();
+    NVIC_SetPendingIRQ(SWI1_EGU1_IRQn);
     return true;
 }
 
@@ -71,7 +67,6 @@ static bool ble_evt_queue_push(const ble_deferred_evt_t *p_evt)
 {
     uint32_t primask;
     uint8_t next_widx;
-    bool queued = false;
 
     if (p_evt == NULL)
     {
@@ -81,21 +76,21 @@ static bool ble_evt_queue_push(const ble_deferred_evt_t *p_evt)
     primask = irq_lock();
 
     next_widx = (uint8_t)((m_evt_dispatch.widx + 1U) % BLE_EVT_QUEUE_SIZE);
-    if (next_widx != m_evt_dispatch.ridx)
+    if (next_widx == m_evt_dispatch.ridx)
     {
-        m_evt_dispatch.q[m_evt_dispatch.widx] = *p_evt;
-        m_evt_dispatch.widx = next_widx;
-        queued = true;
+        irq_unlock(primask);
+        return false;
     }
 
+    m_evt_dispatch.q[m_evt_dispatch.widx] = *p_evt;
+    m_evt_dispatch.widx = next_widx;
     irq_unlock(primask);
-    return queued;
+    return true;
 }
 
 static bool ble_evt_queue_pop(ble_deferred_evt_t *p_evt)
 {
     uint32_t primask;
-    bool has_evt = false;
 
     if (p_evt == NULL)
     {
@@ -104,15 +99,16 @@ static bool ble_evt_queue_pop(ble_deferred_evt_t *p_evt)
 
     primask = irq_lock();
 
-    if (m_evt_dispatch.ridx != m_evt_dispatch.widx)
+    if (m_evt_dispatch.ridx == m_evt_dispatch.widx)
     {
-        *p_evt = m_evt_dispatch.q[m_evt_dispatch.ridx];
-        m_evt_dispatch.ridx = (uint8_t)((m_evt_dispatch.ridx + 1U) % BLE_EVT_QUEUE_SIZE);
-        has_evt = true;
+        irq_unlock(primask);
+        return false;
     }
 
+    *p_evt = m_evt_dispatch.q[m_evt_dispatch.ridx];
+    m_evt_dispatch.ridx = (uint8_t)((m_evt_dispatch.ridx + 1U) % BLE_EVT_QUEUE_SIZE);
     irq_unlock(primask);
-    return has_evt;
+    return true;
 }
 
 static void ble_evt_init(ble_evt_t *p_evt, ble_evt_type_t evt_type)
@@ -121,6 +117,13 @@ static void ble_evt_init(ble_evt_t *p_evt, ble_evt_type_t evt_type)
     p_evt->evt_type = evt_type;
     p_evt->conn_interval_ms = m_link.conn_interval_ms;
     p_evt->supervision_timeout_ms = m_link.supervision_timeout_ms;
+}
+
+static ble_deferred_evt_kind_t ble_stack_evt_kind_get(ble_evt_type_t evt_type)
+{
+    return (evt_type == BLE_GATT_EVT_MTU_EXCHANGE) ?
+               BLE_DEFERRED_EVT_KIND_GATT :
+               BLE_DEFERRED_EVT_KIND_GAP;
 }
 
 void diag_packet_trace_push(bool tx,
@@ -194,26 +197,27 @@ void ble_evt_dispatch_init(void)
     NVIC_EnableIRQ(SWI1_EGU1_IRQn);
 }
 
-bool ble_evt_notify(ble_evt_type_t evt_type)
+bool ble_evt_notify_gap(ble_evt_type_t evt_type)
 {
     ble_deferred_evt_t evt;
 
-    if (m_evt_handler == NULL)
+    if ((m_evt_handler == NULL) ||
+        (ble_stack_evt_kind_get(evt_type) != BLE_DEFERRED_EVT_KIND_GAP))
     {
         return false;
     }
 
     (void)memset(&evt, 0, sizeof(evt));
-    evt.kind = BLE_DEFERRED_EVT_KIND_BLE;
-    ble_evt_init(&evt.params.ble, evt_type);
+    evt.kind = BLE_DEFERRED_EVT_KIND_GAP;
+    ble_evt_init(&evt.params.stack_evt, evt_type);
     return ble_evt_post(&evt);
 }
 
-bool ble_evt_notify_gatt(ble_gatt_evt_type_t evt_type,
-                         ble_gatt_characteristic_t *p_characteristic,
-                         const uint8_t *p_data,
-                         uint16_t len,
-                         bool notifications_enabled)
+bool ble_evt_notify_gatt_characteristic(ble_gatt_evt_type_t evt_type,
+                                        ble_gatt_characteristic_t *p_characteristic,
+                                        const uint8_t *p_data,
+                                        uint16_t len,
+                                        bool notifications_enabled)
 {
     ble_deferred_evt_t evt;
 
@@ -228,21 +232,21 @@ bool ble_evt_notify_gatt(ble_gatt_evt_type_t evt_type,
     }
 
     (void)memset(&evt, 0, sizeof(evt));
-    evt.kind = BLE_DEFERRED_EVT_KIND_GATT;
-    evt.params.gatt.evt_type = evt_type;
-    evt.params.gatt.p_characteristic = p_characteristic;
+    evt.kind = BLE_DEFERRED_EVT_KIND_GATT_CHARACTERISTIC;
+    evt.params.gatt_characteristic.evt_type = evt_type;
+    evt.params.gatt_characteristic.p_characteristic = p_characteristic;
     if ((p_data != NULL) && (len > 0U))
     {
-        (void)memcpy(evt.params.gatt.data, p_data, len);
+        (void)memcpy(evt.params.gatt_characteristic.data, p_data, len);
     }
-    evt.params.gatt.len = len;
-    evt.params.gatt.notifications_enabled = notifications_enabled;
+    evt.params.gatt_characteristic.len = len;
+    evt.params.gatt_characteristic.notifications_enabled = notifications_enabled;
     return ble_evt_post(&evt);
 }
 
-bool ble_evt_notify_mtu_exchange(uint16_t requested_mtu,
-                                 uint16_t response_mtu,
-                                 uint16_t effective_mtu)
+bool ble_evt_notify_gatt_mtu_exchange(uint16_t requested_mtu,
+                                      uint16_t response_mtu,
+                                      uint16_t effective_mtu)
 {
     ble_deferred_evt_t evt;
 
@@ -252,26 +256,27 @@ bool ble_evt_notify_mtu_exchange(uint16_t requested_mtu,
     }
 
     (void)memset(&evt, 0, sizeof(evt));
-    evt.kind = BLE_DEFERRED_EVT_KIND_BLE;
-    ble_evt_init(&evt.params.ble, BLE_EVT_MTU_EXCHANGE);
-    evt.params.ble.requested_mtu = requested_mtu;
-    evt.params.ble.response_mtu = response_mtu;
-    evt.params.ble.effective_mtu = effective_mtu;
+    evt.kind = BLE_DEFERRED_EVT_KIND_GATT;
+    ble_evt_init(&evt.params.stack_evt, BLE_GATT_EVT_MTU_EXCHANGE);
+    evt.params.stack_evt.requested_mtu = requested_mtu;
+    evt.params.stack_evt.response_mtu = response_mtu;
+    evt.params.stack_evt.effective_mtu = effective_mtu;
     return ble_evt_post(&evt);
 }
 
 static void ble_gatt_evt_dispatch(const ble_deferred_evt_t *p_evt)
 {
-    ble_gatt_evt_t gatt_evt;
+    ble_gatt_evt_t gatt_evt = {
+        .evt_type = p_evt->params.gatt_characteristic.evt_type,
+        .p_characteristic = p_evt->params.gatt_characteristic.p_characteristic,
+        .p_data = (p_evt->params.gatt_characteristic.evt_type == BLE_GATT_EVT_WRITE) ?
+                      p_evt->params.gatt_characteristic.data :
+                      NULL,
+        .len = p_evt->params.gatt_characteristic.len,
+        .notifications_enabled = p_evt->params.gatt_characteristic.notifications_enabled,
+    };
 
-    gatt_evt.evt_type = p_evt->params.gatt.evt_type;
-    gatt_evt.p_characteristic = p_evt->params.gatt.p_characteristic;
-    gatt_evt.p_data = (gatt_evt.evt_type == BLE_GATT_EVT_WRITE) ?
-                          p_evt->params.gatt.data :
-                          NULL;
-    gatt_evt.len = p_evt->params.gatt.len;
-    gatt_evt.notifications_enabled = p_evt->params.gatt.notifications_enabled;
-    p_evt->params.gatt.p_characteristic->evt_handler(&gatt_evt);
+    p_evt->params.gatt_characteristic.p_characteristic->evt_handler(&gatt_evt);
 }
 
 void SWI1_EGU1_IRQHandler(void)
@@ -280,15 +285,17 @@ void SWI1_EGU1_IRQHandler(void)
 
     while (ble_evt_queue_pop(&evt))
     {
-        if ((evt.kind == BLE_DEFERRED_EVT_KIND_BLE) && (m_evt_handler != NULL))
+        if (((evt.kind == BLE_DEFERRED_EVT_KIND_GAP) ||
+             (evt.kind == BLE_DEFERRED_EVT_KIND_GATT)) &&
+            (m_evt_handler != NULL))
         {
-            m_evt_handler(&evt.params.ble);
+            m_evt_handler(&evt.params.stack_evt);
             continue;
         }
 
-        if ((evt.kind == BLE_DEFERRED_EVT_KIND_GATT) &&
-            (evt.params.gatt.p_characteristic != NULL) &&
-            (evt.params.gatt.p_characteristic->evt_handler != NULL))
+        if ((evt.kind == BLE_DEFERRED_EVT_KIND_GATT_CHARACTERISTIC) &&
+            (evt.params.gatt_characteristic.p_characteristic != NULL) &&
+            (evt.params.gatt_characteristic.p_characteristic->evt_handler != NULL))
         {
             ble_gatt_evt_dispatch(&evt);
         }

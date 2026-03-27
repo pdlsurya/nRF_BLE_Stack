@@ -40,13 +40,8 @@ static bool ble_diag_take_u8(volatile uint8_t *p_queue,
 {
     uint8_t ridx;
 
-    if (p_value == NULL)
-    {
-        return false;
-    }
-
     ridx = *p_ridx;
-    if (ridx == widx)
+    if ((p_value == NULL) || (ridx == widx))
     {
         return false;
     }
@@ -58,13 +53,13 @@ static bool ble_diag_take_u8(volatile uint8_t *p_queue,
 
 static void ble_adv_name_set(const char *p_name)
 {
-    size_t name_len = 0U;
+    size_t name_len;
 
     m_host.adv_name[0] = '\0';
     m_host.adv_name_len = 0U;
     m_host.has_adv_name = false;
 
-    if (p_name == NULL)
+    if ((p_name == NULL) || (p_name[0] == '\0'))
     {
         return;
     }
@@ -122,21 +117,13 @@ bool ble_diag_take_first_att_opcode(uint8_t *p_opcode)
 
 bool ble_diag_take_packet_trace(ble_diag_packet_trace_t *p_trace)
 {
-    uint8_t ridx;
-
-    if (p_trace == NULL)
+    if ((p_trace == NULL) || (m_diag.packet_q_ridx == m_diag.packet_q_widx))
     {
         return false;
     }
 
-    ridx = m_diag.packet_q_ridx;
-    if (ridx == m_diag.packet_q_widx)
-    {
-        return false;
-    }
-
-    *p_trace = m_diag.packet_q[ridx];
-    m_diag.packet_q_ridx = (uint8_t)((ridx + 1U) & 0x0FU);
+    *p_trace = m_diag.packet_q[m_diag.packet_q_ridx];
+    m_diag.packet_q_ridx = (uint8_t)((m_diag.packet_q_ridx + 1U) & 0x0FU);
     return true;
 }
 
@@ -154,16 +141,16 @@ void ble_stack_init(void)
 {
     bool adv_timer_created = m_controller.adv_timer_created;
 
-    (void)memset(&m_host, 0, sizeof(m_host));
-    (void)memset(&m_controller, 0, sizeof(m_controller));
-    (void)memset(&m_link, 0, sizeof(m_link));
-    (void)memset(&m_ctrl_rt, 0, sizeof(m_ctrl_rt));
-    m_host.flags = 0x06U;
-    m_host.adv_interval_ms = BLE_ADV_INTERVAL_MS_DEFAULT;
-    m_host.gap_conn_params = m_gap_conn_params_default;
+    m_host = (ble_host_t){
+        .flags = m_adv_config_default.flags,
+        .adv_interval_ms = m_adv_config_default.interval_ms,
+        .gap_conn_params = m_gap_conn_params_default,
+    };
+    m_controller = (ble_controller_t){.adv_timer_created = adv_timer_created};
+    m_link = (ble_link_t){0};
+    m_ctrl_rt = (ble_ctrl_runtime_t){0};
+    m_diag = (ble_diag_state_t){0};
     m_evt_handler = NULL;
-    (void)memset(&m_diag, 0, sizeof(m_diag));
-    m_controller.adv_timer_created = adv_timer_created;
     controller_load_identity_address();
 
     ble_evt_dispatch_init();
