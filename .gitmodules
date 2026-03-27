@@ -1,0 +1,3 @@
+[submodule "external/nrf5-sdk"]
+	path = external/nrf5-sdk
+	url = https://github.com/greenlsi/nrf5-sdk

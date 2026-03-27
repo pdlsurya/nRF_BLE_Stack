@@ -27,6 +27,10 @@ deferred application callbacks.
   ATT/GATT database build and request handling
 - `radio/`
   nRF radio peripheral abstraction used by the controller
+- `examples/custom_ble_stack_demo/`
+  Example peripheral application using the stack
+- `external/nrf5-sdk/`
+  nRF5 SDK Git submodule used by the example build
 - `BLE_STACK_WALKTHROUGH.pdf`
   Detailed architecture and packet-flow walkthrough
 
@@ -45,6 +49,23 @@ Main application-facing entry points:
 - `ble_disconnect()`
 
 See [nrf_ble.h](include/nrf_ble.h) for the full public interface.
+
+## Example
+
+The repository includes a working example application in
+`examples/custom_ble_stack_demo`.
+
+Before building the example, initialize the SDK submodule:
+
+```sh
+git submodule update --init --recursive
+```
+
+Build the example with:
+
+```sh
+make -C examples/custom_ble_stack_demo -j4
+```
 
 ## Typical Usage
 
