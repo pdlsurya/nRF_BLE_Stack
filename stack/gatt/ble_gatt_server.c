@@ -83,21 +83,26 @@ typedef struct
 
 typedef struct
 {
-    ble_gatt_service_t *p_service;
     uint8_t value[2];
-    uint16_t value_len;
 } gatt_service_runtime_t;
 
 typedef struct
 {
-    ble_gatt_service_t *p_service;
     ble_gatt_characteristic_t *p_characteristic;
     uint8_t decl_value[5];
-    uint16_t decl_len;
     uint8_t cccd_value[2];
-    uint16_t cccd_len;
     bool notifications_enabled;
 } gatt_char_runtime_t;
+
+typedef struct
+{
+    uint8_t gap_service[2];
+    uint8_t gap_devname_decl[5];
+    uint8_t gap_devname_value[20];
+    uint8_t gap_appear_decl[5];
+    uint8_t gap_appear_value[2];
+    uint8_t gatt_service[2];
+} gatt_fixed_attr_values_t;
 
 static uint16_t m_att_mtu = BLE_ATT_MTU_DEFAULT;
 static uint8_t m_att_rsp[BLE_ATT_GATT_MAX_MTU];
@@ -107,19 +112,17 @@ static gatt_service_runtime_t m_service_runtime[BLE_GATT_MAX_SERVICES];
 static uint8_t m_service_runtime_count;
 static gatt_char_runtime_t m_char_runtime[BLE_GATT_MAX_CHARACTERISTICS];
 static uint8_t m_char_runtime_count;
-
-static uint8_t m_attr_gap_service[] = {0x00U, 0x18U};
-static uint16_t m_attr_gap_service_len = 2U;
-static uint8_t m_attr_gap_devname_decl[] = {BLE_GATT_CHAR_PROP_READ, HANDLE_GAP_DEVNAME_VALUE, 0x00U, 0x00U, 0x2AU};
-static uint16_t m_attr_gap_devname_decl_len = 5U;
-static uint8_t m_attr_gap_devname_value[20] = "nrf52-ble";
-static uint16_t m_attr_gap_devname_value_len = 8U;
-static uint8_t m_attr_gap_appear_decl[] = {BLE_GATT_CHAR_PROP_READ, HANDLE_GAP_APPEAR_VALUE, 0x00U, 0x01U, 0x2AU};
-static uint16_t m_attr_gap_appear_decl_len = 5U;
-static uint8_t m_attr_gap_appear_value[] = {0x00U, 0x00U};
-static uint16_t m_attr_gap_appear_value_len = 2U;
-static uint8_t m_attr_gatt_service[] = {0x01U, 0x18U};
-static uint16_t m_attr_gatt_service_len = 2U;
+static uint16_t m_uuid16_attr_len = 2U;
+static uint16_t m_decl_attr_len = 5U;
+static gatt_fixed_attr_values_t m_fixed_attr = {
+    .gap_service = {0x00U, 0x18U},
+    .gap_devname_decl = {BLE_GATT_CHAR_PROP_READ, HANDLE_GAP_DEVNAME_VALUE, 0x00U, 0x00U, 0x2AU},
+    .gap_devname_value = "nrf52-ble",
+    .gap_appear_decl = {BLE_GATT_CHAR_PROP_READ, HANDLE_GAP_APPEAR_VALUE, 0x00U, 0x01U, 0x2AU},
+    .gap_appear_value = {0x00U, 0x00U},
+    .gatt_service = {0x01U, 0x18U},
+};
+static uint16_t m_gap_devname_value_len = 8U;
 
 static uint16_t att_error_rsp(uint8_t req_opcode, uint16_t handle, uint8_t error_code)
 {
@@ -205,11 +208,6 @@ static gatt_char_runtime_t *gatt_find_char_runtime_by_cccd_handle(uint16_t cccd_
 static gatt_char_runtime_t *gatt_find_char_runtime_by_characteristic(const ble_gatt_characteristic_t *p_characteristic)
 {
     uint8_t i;
-
-    if (p_characteristic == NULL)
-    {
-        return NULL;
-    }
 
     for (i = 0U; i < m_char_runtime_count; i++)
     {
@@ -608,45 +606,146 @@ static bool gatt_build_fixed_attrs(void)
     return gatt_db_add_attr(HANDLE_GAP_SERVICE,
                             BLE_UUID_PRIMARY_SERVICE,
                             BLE_ATT_PERM_READ,
-                            m_attr_gap_service,
-                            &m_attr_gap_service_len,
-                            sizeof(m_attr_gap_service),
+                            m_fixed_attr.gap_service,
+                            &m_uuid16_attr_len,
+                            sizeof(m_fixed_attr.gap_service),
                             NULL) &&
            gatt_db_add_attr(HANDLE_GAP_DEVNAME_DECL,
                             BLE_UUID_CHARACTERISTIC,
                             BLE_ATT_PERM_READ,
-                            m_attr_gap_devname_decl,
-                            &m_attr_gap_devname_decl_len,
-                            sizeof(m_attr_gap_devname_decl),
+                            m_fixed_attr.gap_devname_decl,
+                            &m_decl_attr_len,
+                            sizeof(m_fixed_attr.gap_devname_decl),
                             NULL) &&
            gatt_db_add_attr(HANDLE_GAP_DEVNAME_VALUE,
                             BLE_UUID_DEVICE_NAME,
                             BLE_ATT_PERM_READ,
-                            m_attr_gap_devname_value,
-                            &m_attr_gap_devname_value_len,
-                            sizeof(m_attr_gap_devname_value),
+                            m_fixed_attr.gap_devname_value,
+                            &m_gap_devname_value_len,
+                            sizeof(m_fixed_attr.gap_devname_value),
                             NULL) &&
            gatt_db_add_attr(HANDLE_GAP_APPEAR_DECL,
                             BLE_UUID_CHARACTERISTIC,
                             BLE_ATT_PERM_READ,
-                            m_attr_gap_appear_decl,
-                            &m_attr_gap_appear_decl_len,
-                            sizeof(m_attr_gap_appear_decl),
+                            m_fixed_attr.gap_appear_decl,
+                            &m_decl_attr_len,
+                            sizeof(m_fixed_attr.gap_appear_decl),
                             NULL) &&
            gatt_db_add_attr(HANDLE_GAP_APPEAR_VALUE,
                             BLE_UUID_APPEARANCE,
                             BLE_ATT_PERM_READ,
-                            m_attr_gap_appear_value,
-                            &m_attr_gap_appear_value_len,
-                            sizeof(m_attr_gap_appear_value),
+                            m_fixed_attr.gap_appear_value,
+                            &m_uuid16_attr_len,
+                            sizeof(m_fixed_attr.gap_appear_value),
                             NULL) &&
            gatt_db_add_attr(HANDLE_GATT_SERVICE,
                             BLE_UUID_PRIMARY_SERVICE,
                             BLE_ATT_PERM_READ,
-                            m_attr_gatt_service,
-                            &m_attr_gatt_service_len,
-                            sizeof(m_attr_gatt_service),
+                            m_fixed_attr.gatt_service,
+                            &m_uuid16_attr_len,
+                            sizeof(m_fixed_attr.gatt_service),
                             NULL);
+}
+
+static bool gatt_add_service(ble_gatt_service_t *p_service, uint16_t *p_next_handle)
+{
+    gatt_service_runtime_t *p_service_runtime;
+
+    if ((p_service == NULL) ||
+        (p_next_handle == NULL) ||
+        (p_service->p_characteristics == NULL) ||
+        (p_service->characteristic_count == 0U) ||
+        (m_service_runtime_count >= BLE_GATT_MAX_SERVICES))
+    {
+        return false;
+    }
+
+    p_service_runtime = &m_service_runtime[m_service_runtime_count];
+    u16_encode(p_service->uuid, p_service_runtime->value);
+    p_service->service_handle = *p_next_handle;
+
+    if (!gatt_db_add_attr(*p_next_handle,
+                          BLE_UUID_PRIMARY_SERVICE,
+                          BLE_ATT_PERM_READ,
+                          p_service_runtime->value,
+                          &m_uuid16_attr_len,
+                          sizeof(p_service_runtime->value),
+                          NULL))
+    {
+        return false;
+    }
+
+    (*p_next_handle)++;
+    m_service_runtime_count++;
+    return true;
+}
+
+static bool gatt_add_characteristic(ble_gatt_characteristic_t *p_characteristic, uint16_t *p_next_handle)
+{
+    gatt_char_runtime_t *p_char_runtime;
+
+    if ((p_characteristic == NULL) ||
+        (p_next_handle == NULL) ||
+        !gatt_characteristic_is_valid(p_characteristic) ||
+        (m_char_runtime_count >= BLE_GATT_MAX_CHARACTERISTICS))
+    {
+        return false;
+    }
+
+    p_char_runtime = &m_char_runtime[m_char_runtime_count];
+    (void)memset(p_char_runtime, 0, sizeof(*p_char_runtime));
+    p_char_runtime->p_characteristic = p_characteristic;
+    p_char_runtime->decl_value[0] = p_characteristic->properties;
+    u16_encode((uint16_t)(*p_next_handle + 1U), &p_char_runtime->decl_value[1]);
+    u16_encode(p_characteristic->uuid, &p_char_runtime->decl_value[3]);
+
+    p_characteristic->value_handle = (uint16_t)(*p_next_handle + 1U);
+    p_characteristic->cccd_handle = 0U;
+
+    if (!gatt_db_add_attr(*p_next_handle,
+                          BLE_UUID_CHARACTERISTIC,
+                          BLE_ATT_PERM_READ,
+                          p_char_runtime->decl_value,
+                          &m_decl_attr_len,
+                          sizeof(p_char_runtime->decl_value),
+                          NULL))
+    {
+        return false;
+    }
+
+    (*p_next_handle)++;
+
+    if (!gatt_db_add_attr(*p_next_handle,
+                          p_characteristic->uuid,
+                          gatt_props_to_permissions(p_characteristic->properties),
+                          p_characteristic->p_value,
+                          p_characteristic->p_value_len,
+                          p_characteristic->max_len,
+                          p_characteristic))
+    {
+        return false;
+    }
+
+    (*p_next_handle)++;
+
+    if ((p_characteristic->properties & BLE_GATT_CHAR_PROP_NOTIFY) != 0U)
+    {
+        p_characteristic->cccd_handle = *p_next_handle;
+        if (!gatt_db_add_attr(*p_next_handle,
+                              BLE_UUID_CCCD,
+                              (uint8_t)(BLE_ATT_PERM_READ | BLE_ATT_PERM_WRITE),
+                              p_char_runtime->cccd_value,
+                              &m_uuid16_attr_len,
+                              sizeof(p_char_runtime->cccd_value),
+                              p_characteristic))
+        {
+            return false;
+        }
+        (*p_next_handle)++;
+    }
+
+    m_char_runtime_count++;
+    return true;
 }
 
 static bool gatt_build_custom_attrs(ble_gatt_service_t *p_services, uint8_t service_count)
@@ -667,110 +766,19 @@ static bool gatt_build_custom_attrs(ble_gatt_service_t *p_services, uint8_t serv
     for (service_idx = 0U; service_idx < service_count; service_idx++)
     {
         ble_gatt_service_t *p_service = &p_services[service_idx];
-        gatt_service_runtime_t *p_service_runtime;
         uint8_t char_idx;
 
-        if ((p_service->p_characteristics == NULL) || (p_service->characteristic_count == 0U))
+        if (!gatt_add_service(p_service, &next_handle))
         {
             return false;
         }
-        if (m_service_runtime_count >= BLE_GATT_MAX_SERVICES)
-        {
-            return false;
-        }
-
-        p_service_runtime = &m_service_runtime[m_service_runtime_count];
-        p_service_runtime->p_service = p_service;
-        p_service_runtime->value[0] = (uint8_t)(p_service->uuid & 0xFFU);
-        p_service_runtime->value[1] = (uint8_t)((p_service->uuid >> 8) & 0xFFU);
-        p_service_runtime->value_len = 2U;
-        p_service->service_handle = next_handle;
-
-        if (!gatt_db_add_attr(next_handle,
-                              BLE_UUID_PRIMARY_SERVICE,
-                              BLE_ATT_PERM_READ,
-                              p_service_runtime->value,
-                              &p_service_runtime->value_len,
-                              sizeof(p_service_runtime->value),
-                              NULL))
-        {
-            return false;
-        }
-
-        next_handle++;
-        m_service_runtime_count++;
 
         for (char_idx = 0U; char_idx < p_service->characteristic_count; char_idx++)
         {
-            ble_gatt_characteristic_t *p_characteristic = &p_service->p_characteristics[char_idx];
-            gatt_char_runtime_t *p_char_runtime;
-
-            if (!gatt_characteristic_is_valid(p_characteristic))
+            if (!gatt_add_characteristic(&p_service->p_characteristics[char_idx], &next_handle))
             {
                 return false;
             }
-
-            if (m_char_runtime_count >= BLE_GATT_MAX_CHARACTERISTICS)
-            {
-                return false;
-            }
-
-            p_char_runtime = &m_char_runtime[m_char_runtime_count];
-            (void)memset(p_char_runtime, 0, sizeof(*p_char_runtime));
-            p_char_runtime->p_service = p_service;
-            p_char_runtime->p_characteristic = p_characteristic;
-            p_char_runtime->decl_len = 5U;
-            p_char_runtime->cccd_len = 2U;
-            p_char_runtime->decl_value[0] = p_characteristic->properties;
-            u16_encode((uint16_t)(next_handle + 1U), &p_char_runtime->decl_value[1]);
-            u16_encode(p_characteristic->uuid, &p_char_runtime->decl_value[3]);
-
-            p_characteristic->value_handle = (uint16_t)(next_handle + 1U);
-            p_characteristic->cccd_handle = 0U;
-
-            if (!gatt_db_add_attr(next_handle,
-                                  BLE_UUID_CHARACTERISTIC,
-                                  BLE_ATT_PERM_READ,
-                                  p_char_runtime->decl_value,
-                                  &p_char_runtime->decl_len,
-                                  sizeof(p_char_runtime->decl_value),
-                                  NULL))
-            {
-                return false;
-            }
-
-            next_handle++;
-
-            if (!gatt_db_add_attr(next_handle,
-                                  p_characteristic->uuid,
-                                  gatt_props_to_permissions(p_characteristic->properties),
-                                  p_characteristic->p_value,
-                                  p_characteristic->p_value_len,
-                                  p_characteristic->max_len,
-                                  p_characteristic))
-            {
-                return false;
-            }
-
-            next_handle++;
-
-            if ((p_characteristic->properties & BLE_GATT_CHAR_PROP_NOTIFY) != 0U)
-            {
-                p_characteristic->cccd_handle = next_handle;
-                if (!gatt_db_add_attr(next_handle,
-                                      BLE_UUID_CCCD,
-                                      (uint8_t)(BLE_ATT_PERM_READ | BLE_ATT_PERM_WRITE),
-                                      p_char_runtime->cccd_value,
-                                      &p_char_runtime->cccd_len,
-                                      sizeof(p_char_runtime->cccd_value),
-                                      p_characteristic))
-                {
-                    return false;
-                }
-                next_handle++;
-            }
-
-            m_char_runtime_count++;
         }
     }
 
@@ -780,32 +788,24 @@ static bool gatt_build_custom_attrs(ble_gatt_service_t *p_services, uint8_t serv
 bool ble_gatt_server_init(ble_gatt_service_t *p_services,
                           uint8_t service_count)
 {
-    const char *p_name = m_host.has_adv_name ? m_host.adv_name : "nrf52-ble";
+    const char *p_name = (m_host.adv_name_len != 0U) ? m_host.adv_name : "nrf52-ble";
     size_t name_len;
 
     gatt_reset_runtime_tables();
 
     name_len = strlen(p_name);
-    if (name_len > sizeof(m_attr_gap_devname_value))
+    if (name_len > sizeof(m_fixed_attr.gap_devname_value))
     {
-        name_len = sizeof(m_attr_gap_devname_value);
+        name_len = sizeof(m_fixed_attr.gap_devname_value);
     }
 
-    (void)memset(m_attr_gap_devname_value, 0, sizeof(m_attr_gap_devname_value));
-    (void)memcpy(m_attr_gap_devname_value, p_name, name_len);
-    m_attr_gap_devname_value_len = (uint16_t)name_len;
-
-    m_attr_gap_appear_value[0] = 0x00U;
-    m_attr_gap_appear_value[1] = 0x00U;
+    (void)memset(m_fixed_attr.gap_devname_value, 0, sizeof(m_fixed_attr.gap_devname_value));
+    (void)memcpy(m_fixed_attr.gap_devname_value, p_name, name_len);
+    m_gap_devname_value_len = (uint16_t)name_len;
 
     gatt_reset_user_handles(p_services, service_count);
 
-    if (!gatt_build_fixed_attrs())
-    {
-        return false;
-    }
-
-    if (!gatt_build_custom_attrs(p_services, service_count))
+    if (!gatt_build_fixed_attrs() || !gatt_build_custom_attrs(p_services, service_count))
     {
         return false;
     }
@@ -825,20 +825,13 @@ void ble_gatt_server_reset_connection_state(void)
         m_char_runtime[i].notifications_enabled = false;
         m_char_runtime[i].cccd_value[0] = 0U;
         m_char_runtime[i].cccd_value[1] = 0U;
-        m_char_runtime[i].cccd_len = 2U;
     }
 }
 
 bool ble_gatt_server_notifications_enabled(const ble_gatt_characteristic_t *p_characteristic)
 {
     gatt_char_runtime_t *p_char_runtime = gatt_find_char_runtime_by_characteristic(p_characteristic);
-
-    if (p_char_runtime == NULL)
-    {
-        return false;
-    }
-
-    return p_char_runtime->notifications_enabled;
+    return (p_char_runtime != NULL) && p_char_runtime->notifications_enabled;
 }
 
 uint16_t ble_gatt_server_build_notification(uint16_t value_handle, uint8_t *p_att, uint16_t max_len)
@@ -901,15 +894,7 @@ uint16_t ble_gatt_server_process_request(const uint8_t *p_att,
             break;
         }
         requested_mtu = u16_decode(&p_att[1]);
-        m_att_mtu = requested_mtu;
-        if (m_att_mtu > BLE_ATT_MTU_DEFAULT)
-        {
-            m_att_mtu = BLE_ATT_MTU_DEFAULT;
-        }
-        if (m_att_mtu < BLE_ATT_MTU_DEFAULT)
-        {
-            m_att_mtu = BLE_ATT_MTU_DEFAULT;
-        }
+        m_att_mtu = BLE_ATT_MTU_DEFAULT;
         m_att_rsp[0] = BLE_ATT_OP_MTU_RSP;
         u16_encode(BLE_ATT_MTU_DEFAULT, &m_att_rsp[1]);
         (void)ble_evt_notify_gatt_mtu_exchange(requested_mtu,

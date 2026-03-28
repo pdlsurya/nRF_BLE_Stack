@@ -22,20 +22,6 @@ APP_TIMER_DEF(m_adv_timer_id);
 static void ble_advertise(void);
 static void controller_start_connection_event(void);
 static void controller_apply_pending_link_updates(void);
-static uint8_t controller_build_used_channels(const uint8_t *p_channel_map, uint8_t *p_channels);
-static void controller_prepare_radio_common(uint8_t max_payload_size,
-                                            const uint8_t *p_address,
-                                            uint32_t crc_init,
-                                            uint32_t packet_ptr);
-static void controller_reset_tx_runtime(void);
-static void controller_reset_diag_state(uint8_t packet_budget);
-static void controller_queue_current_tx_pdu(void);
-static void controller_diag_opcode_push(volatile uint8_t *p_queue,
-                                        volatile uint8_t *p_widx,
-                                        uint8_t ridx,
-                                        uint8_t opcode);
-static void controller_irq_unlock(uint32_t primask);
-static uint8_t controller_conn_header(uint8_t llid);
 
 static void controller_conn_timer_schedule_compare(void)
 {
@@ -164,9 +150,10 @@ void TIMER2_IRQHandler(void)
 }
 static void controller_set_adv_channel(uint8_t channel_idx)
 {
-    m_controller.adv_channel_index = (uint8_t)(channel_idx % 3U);
-    radio_set_frequency(m_adv_freq_mhz_offset[m_controller.adv_channel_index]);
-    radio_set_whiteiv(m_adv_channels[m_controller.adv_channel_index]);
+    uint8_t adv_channel_index = (uint8_t)(channel_idx % 3U);
+
+    radio_set_frequency(m_adv_freq_mhz_offset[adv_channel_index]);
+    radio_set_whiteiv(m_adv_channels[adv_channel_index]);
 }
 
 static void controller_set_data_channel(uint8_t channel)
@@ -272,106 +259,84 @@ static void controller_reset_tx_runtime(void)
     m_ctrl_rt.has_pending_conn_tx_pdu = false;
 }
 
-static void controller_reset_diag_state(uint8_t packet_budget)
+static ble_ll_data_header_t controller_conn_header(uint8_t llid)
 {
-    (void)memset((void *)&m_diag, 0, sizeof(m_diag));
-    m_diag.packet_budget = packet_budget;
-}
+    ble_ll_data_header_t header = {
+        .llid = llid,
+        .nesn = (uint8_t)(m_link.rx_sn & 0x01U),
+        .sn = (uint8_t)(m_link.tx_sn & 0x01U),
+        .md = 0U,
+        .rfu = 0U,
+    };
 
-static void controller_irq_unlock(uint32_t primask)
-{
-    if (primask == 0U)
-    {
-        __enable_irq();
-    }
-}
-
-static uint8_t controller_conn_header(uint8_t llid)
-{
-    return (uint8_t)(llid |
-                     ((m_link.rx_sn & 0x01U) << 2) |
-                     ((m_link.tx_sn & 0x01U) << 3));
+    return header;
 }
 
 static void controller_queue_current_tx_pdu(void)
 {
-    uint32_t primask = __get_PRIMASK();
+    uint32_t primask = irq_lock();
 
-    __disable_irq();
     m_ctrl_rt.pending_conn_tx_pdu = m_ctrl_rt.conn_tx_pdu;
     m_ctrl_rt.has_pending_conn_tx_pdu = true;
-    controller_irq_unlock(primask);
+    irq_unlock(primask);
 }
 
-static void controller_diag_opcode_push(volatile uint8_t *p_queue,
-                                        volatile uint8_t *p_widx,
-                                        uint8_t ridx,
-                                        uint8_t opcode)
-{
-    uint8_t next_widx = (uint8_t)((*p_widx + 1U) & 0x07U);
-
-    if (next_widx == ridx)
-    {
-        return;
-    }
-
-    p_queue[*p_widx] = opcode;
-    *p_widx = next_widx;
-}
-
-static bool host_add_ad_structure(uint8_t type, const uint8_t *p_data, uint8_t size)
+static bool host_add_ad_structure(uint8_t *p_adv_data_len,
+                                  uint8_t type,
+                                  const uint8_t *p_data,
+                                  uint8_t size)
 {
     uint8_t *p_adv_data;
 
-    if ((p_data == NULL) || (size == 0U))
+    if ((p_adv_data_len == NULL) || (p_data == NULL) || (size == 0U))
     {
         return false;
     }
-    if ((uint16_t)m_host.adv_data_len + (uint16_t)size + 2U > BLE_MAX_ADV_DATA_LEN)
+    if ((uint16_t)(*p_adv_data_len) + (uint16_t)size + 2U > BLE_MAX_ADV_DATA_LEN)
     {
         return false;
     }
 
-    p_adv_data = &m_ctrl_rt.air_pdu.payload[m_host.adv_data_len];
+    p_adv_data = &m_ctrl_rt.air_pdu.payload[*p_adv_data_len];
     p_adv_data[0] = (uint8_t)(size + 1U);
     p_adv_data[1] = type;
     (void)memcpy(&p_adv_data[2], p_data, size);
-    m_host.adv_data_len = (uint8_t)(m_host.adv_data_len + size + 2U);
+    *p_adv_data_len = (uint8_t)(*p_adv_data_len + size + 2U);
 
     return true;
 }
 
 static void host_build_adv_pdu(void)
 {
-    uint8_t header;
+    uint8_t adv_data_len = 0U;
     uint16_t uuid_le;
     uint8_t service_data_raw[3];
     uint8_t flags;
 
     (void)memset(&m_ctrl_rt.air_pdu, 0, sizeof(m_ctrl_rt.air_pdu));
-    m_host.adv_data_len = 0U;
 
-    header = (uint8_t)(LL_ADV_IND & 0x0FU);
-    header |= (uint8_t)((m_ctrl_rt.adv_txadd & 0x01U) << 6);
-    m_ctrl_rt.air_pdu.header = header;
+    m_ctrl_rt.air_pdu.header.pdu_type = LL_ADV_IND;
+    m_ctrl_rt.air_pdu.header.rfu = 0U;
+    m_ctrl_rt.air_pdu.header.txadd = (uint8_t)(m_ctrl_rt.adv_txadd & 0x01U);
+    m_ctrl_rt.air_pdu.header.rxadd = 0U;
     (void)memcpy(m_ctrl_rt.air_pdu.mac_address,
                  m_ctrl_rt.adv_address,
                  sizeof(m_ctrl_rt.adv_address));
 
     flags = m_host.flags;
-    (void)host_add_ad_structure(0x01U, &flags, 1U);
+    (void)host_add_ad_structure(&adv_data_len, 0x01U, &flags, 1U);
 
-    if (m_host.has_adv_name)
+    if (m_host.adv_name_len != 0U)
     {
-        (void)host_add_ad_structure(0x09U, (const uint8_t *)m_host.adv_name, m_host.adv_name_len);
+        (void)host_add_ad_structure(&adv_data_len, 0x09U, (const uint8_t *)m_host.adv_name, m_host.adv_name_len);
     }
 
-    (void)host_add_ad_structure(0x0AU, (const uint8_t *)&m_host.tx_power, 1U);
+    (void)host_add_ad_structure(&adv_data_len, 0x0AU, (const uint8_t *)&m_host.tx_power, 1U);
 
-    if (m_host.has_included_service_uuid)
+    if (m_host.included_service_uuid != 0U)
     {
         uuid_le = m_host.included_service_uuid;
-        (void)host_add_ad_structure(0x03U, (const uint8_t *)&uuid_le, sizeof(uuid_le));
+        (void)host_add_ad_structure(&adv_data_len, 0x03U, (const uint8_t *)&uuid_le, sizeof(uuid_le));
     }
 
     if (m_host.has_service_data)
@@ -380,10 +345,10 @@ static void host_build_adv_pdu(void)
         service_data_raw[0] = (uint8_t)(uuid_le & 0xFFU);
         service_data_raw[1] = (uint8_t)((uuid_le >> 8) & 0xFFU);
         service_data_raw[2] = m_host.service_data.data;
-        (void)host_add_ad_structure(0x16U, service_data_raw, sizeof(service_data_raw));
+        (void)host_add_ad_structure(&adv_data_len, 0x16U, service_data_raw, sizeof(service_data_raw));
     }
 
-    m_ctrl_rt.air_pdu.payload_length = (uint8_t)(BLE_ADV_PDU_OVERHEAD + m_host.adv_data_len);
+    m_ctrl_rt.air_pdu.payload_length = (uint8_t)(BLE_ADV_PDU_OVERHEAD + adv_data_len);
 }
 
 static void controller_prepare_radio_for_adv(void)
@@ -411,7 +376,6 @@ void controller_disconnect_internal(void)
     m_link.connected = false;
     m_link.conn_interval_us = 0U;
     controller_reset_tx_runtime();
-    controller_reset_diag_state(0U);
     m_link.event_anchor_captured = false;
     m_link.pending_channel_map_valid = false;
     m_link.pending_channel_map_instant = 0U;
@@ -529,25 +493,24 @@ bool controller_queue_att_payload(const uint8_t *p_att_payload, uint16_t att_len
         return false;
     }
 
-    primask = __get_PRIMASK();
-    __disable_irq();
+    primask = irq_lock();
 
     if (m_ctrl_rt.has_pending_conn_tx_pdu)
     {
-        controller_irq_unlock(primask);
+        irq_unlock(primask);
         return false;
     }
 
     controller_build_att_pdu(p_att_payload, att_len);
     controller_queue_current_tx_pdu();
-    controller_irq_unlock(primask);
+    irq_unlock(primask);
 
     return true;
 }
 
 static void controller_prepare_pending_pdu_for_tx(void)
 {
-    m_ctrl_rt.conn_tx_pdu.header = controller_conn_header((uint8_t)(m_ctrl_rt.pending_conn_tx_pdu.header & 0x03U));
+    m_ctrl_rt.conn_tx_pdu.header = controller_conn_header(m_ctrl_rt.pending_conn_tx_pdu.header.llid);
     m_ctrl_rt.conn_tx_pdu.length = m_ctrl_rt.pending_conn_tx_pdu.length;
     if (m_ctrl_rt.pending_conn_tx_pdu.length > 0U)
     {
@@ -560,7 +523,6 @@ static void controller_prepare_pending_pdu_for_tx(void)
 static void controller_send_conn_response(bool new_tx_pdu)
 {
     uint32_t tx_ptr;
-    const ble_ll_data_raw_pdu_t *p_tx_pdu;
 
     if (!m_link.connected)
     {
@@ -575,14 +537,6 @@ static void controller_send_conn_response(bool new_tx_pdu)
     {
         tx_ptr = (uint32_t)&m_ctrl_rt.conn_tx_pdu;
     }
-
-    p_tx_pdu = (const ble_ll_data_raw_pdu_t *)tx_ptr;
-    diag_packet_trace_push(true,
-                           new_tx_pdu,
-                           (bool)((!new_tx_pdu) && m_ctrl_rt.has_last_conn_tx_pdu),
-                           false,
-                           p_tx_pdu->header,
-                           p_tx_pdu->length);
 
     /* RX phase uses END->DISABLE. Wait until radio reaches DISABLED first. */
     radio_wait_disabled();
@@ -609,7 +563,7 @@ static void controller_send_conn_response(bool new_tx_pdu)
 
     /* Back to RX; keep END->DISABLE for the next RX packet turn-around. */
     radio_set_shorts(RADIO_SHORTS_END_DISABLE_Msk);
-    m_ctrl_rt.conn_rx_pdu.header = 0U;
+    m_ctrl_rt.conn_rx_pdu.header = (ble_ll_data_header_t){0};
     m_ctrl_rt.conn_rx_pdu.length = 0U;
     radio_set_packet_ptr((uint32_t)&m_ctrl_rt.conn_rx_pdu);
     radio_rx_enable();
@@ -648,9 +602,7 @@ static void adv_timer_handler(void *p_context)
 
 static void controller_apply_connect_request(const ble_connect_req_pdu_t *p_req)
 {
-    uint8_t hop_sca;
     uint32_t first_event_delay_us;
-    const uint8_t *p_raw;
 
     if (p_req == NULL)
     {
@@ -659,13 +611,10 @@ static void controller_apply_connect_request(const ble_connect_req_pdu_t *p_req)
 
     (void)memset(&m_link, 0, sizeof(m_link));
     m_link.connected = true;
-    m_link.window_offset_ms = (uint16_t)BLE_1P25MS_UNITS_TO_MS(p_req->ll_data.win_offset);
     m_link.conn_interval_ms = (uint16_t)BLE_1P25MS_UNITS_TO_MS(p_req->ll_data.interval);
     m_link.conn_interval_us = (uint32_t)p_req->ll_data.interval * 1250U;
     m_link.supervision_timeout_ms = (uint16_t)BLE_10MS_UNITS_TO_MS(p_req->ll_data.timeout);
-    p_raw = (const uint8_t *)p_req;
-    hop_sca = p_raw[BLE_CONNECT_REQ_HOP_SCA_OFFSET];
-    m_link.hop_increment = (uint8_t)(hop_sca & 0x1FU);
+    m_link.hop_increment = p_req->ll_data.hop_increment;
     if (m_link.hop_increment == 0U)
     {
         m_link.hop_increment = 5U;
@@ -674,7 +623,6 @@ static void controller_apply_connect_request(const ble_connect_req_pdu_t *p_req)
                       ((uint32_t)p_req->ll_data.crc_init[1] << 8) |
                       ((uint32_t)p_req->ll_data.crc_init[2] << 16);
     controller_reset_tx_runtime();
-    controller_reset_diag_state(24U);
     ble_gatt_server_reset_connection_state();
 
     (void)memcpy(m_link.access_address, p_req->ll_data.access_address, sizeof(m_link.access_address));
@@ -695,10 +643,7 @@ static void controller_apply_connect_request(const ble_connect_req_pdu_t *p_req)
 static void radio_handle_connected_packet(void)
 {
     ble_ll_data_raw_pdu_t rx_pdu = m_ctrl_rt.conn_rx_pdu;
-    uint8_t llid = (uint8_t)(rx_pdu.header & 0x03U);
-    uint8_t nesn = (uint8_t)((rx_pdu.header >> 2U) & 0x01U);
-    uint8_t rx_sn = (uint8_t)((rx_pdu.header >> 3U) & 0x01U);
-    bool is_new_packet = (rx_sn == m_link.rx_sn);
+    bool is_new_packet = (rx_pdu.header.sn == m_link.rx_sn);
     bool tx_needs_retransmit = false;
     uint8_t ctrl_rsp[12];
     uint16_t ctrl_rsp_len = 0U;
@@ -719,8 +664,6 @@ static void radio_handle_connected_packet(void)
         m_link.event_anchor_captured = true;
     }
 
-    diag_packet_trace_push(false, false, false, is_new_packet, rx_pdu.header, rx_pdu.length);
-
     m_link.rx_seen_this_interval = true;
 
     if (!is_new_packet)
@@ -733,7 +676,7 @@ static void radio_handle_connected_packet(void)
      * transmitSeqNum advances only after the peer acknowledges the last PDU.
      * Per the spec, a received NESN different from transmitSeqNum means ACK.
      */
-    if (m_ctrl_rt.tx_unacked && (nesn != m_link.tx_sn))
+    if (m_ctrl_rt.tx_unacked && (rx_pdu.header.nesn != m_link.tx_sn))
     {
         m_ctrl_rt.tx_unacked = false;
         m_link.tx_sn ^= 1U;
@@ -768,28 +711,18 @@ static void radio_handle_connected_packet(void)
         return;
     }
 
-    if (!m_link.first_data_rx_logged)
+    if (!m_link.supervision_started)
     {
-        m_link.first_data_rx_logged = true;
-        m_diag.first_data_pending = true;
-
-        if (!m_link.supervision_started)
-        {
-            m_link.supervision_started = true;
-        }
+        m_link.supervision_started = true;
     }
 
-    if (llid == BLE_LLID_CONTROL_PDU)
+    if (rx_pdu.header.llid == BLE_LLID_CONTROL_PDU)
     {
         if (rx_pdu.length == 0U)
         {
             return;
         }
 
-        controller_diag_opcode_push(m_diag.ctrl_opcode_q,
-                                    &m_diag.ctrl_q_widx,
-                                    m_diag.ctrl_q_ridx,
-                                    rx_pdu.payload[0]);
         ctrl_rsp_len = ll_control_process(rx_pdu.payload, rx_pdu.length, ctrl_rsp);
         if ((ctrl_rsp_len > 0U) && m_link.connected)
         {
@@ -804,7 +737,8 @@ static void radio_handle_connected_packet(void)
         return;
     }
 
-    if ((llid == BLE_LLID_START_L2CAP) || (llid == BLE_LLID_CONTINUATION))
+    if ((rx_pdu.header.llid == BLE_LLID_START_L2CAP) ||
+        (rx_pdu.header.llid == BLE_LLID_CONTINUATION))
     {
         if (rx_pdu.length >= BLE_L2CAP_HDR_LEN)
         {
@@ -814,13 +748,6 @@ static void radio_handle_connected_packet(void)
             if ((l2cap_cid == BLE_L2CAP_CID_ATT) &&
                 ((uint16_t)rx_pdu.length >= (uint16_t)(l2cap_len + BLE_L2CAP_HDR_LEN)))
             {
-                if (l2cap_len > 0U)
-                {
-                    controller_diag_opcode_push(m_diag.att_opcode_q,
-                                                &m_diag.att_q_widx,
-                                                m_diag.att_q_ridx,
-                                                rx_pdu.payload[4]);
-                }
                 att_rsp_len = ble_gatt_server_process_request(&rx_pdu.payload[4],
                                                               l2cap_len,
                                                               att_rsp,

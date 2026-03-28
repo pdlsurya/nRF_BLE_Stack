@@ -22,46 +22,12 @@ const uint8_t m_data_channel_freq[37] = {
     58U, 60U, 62U, 64U, 66U, 68U, 70U, 72U, 74U, 76U, 78U};
 const uint32_t m_ble_crc_poly = 0x100065BU;
 const uint32_t m_adv_crc_init = 0x555555U;
-const uint8_t BLE_CONNECT_REQ_HOP_SCA_OFFSET =
-    (uint8_t)(2U + 6U + 6U + 4U + 3U + 1U + 2U + 2U + 2U + 2U + 5U);
-
 ble_host_t m_host;
 ble_controller_t m_controller;
 ble_link_t m_link;
 ble_evt_handler_t m_evt_handler;
 ble_ctrl_runtime_t m_ctrl_rt;
-ble_diag_state_t m_diag;
 static ble_evt_dispatch_state_t m_evt_dispatch;
-
-static bool ble_evt_queue_push(const ble_deferred_evt_t *p_evt);
-static ble_deferred_evt_kind_t ble_stack_evt_kind_get(ble_evt_type_t evt_type);
-
-static uint32_t irq_lock(void)
-{
-    uint32_t primask = __get_PRIMASK();
-
-    __disable_irq();
-    return primask;
-}
-
-static void irq_unlock(uint32_t primask)
-{
-    if (primask == 0U)
-    {
-        __enable_irq();
-    }
-}
-
-static bool ble_evt_post(const ble_deferred_evt_t *p_evt)
-{
-    if (!ble_evt_queue_push(p_evt))
-    {
-        return false;
-    }
-
-    NVIC_SetPendingIRQ(SWI1_EGU1_IRQn);
-    return true;
-}
 
 static bool ble_evt_queue_push(const ble_deferred_evt_t *p_evt)
 {
@@ -85,6 +51,17 @@ static bool ble_evt_queue_push(const ble_deferred_evt_t *p_evt)
     m_evt_dispatch.q[m_evt_dispatch.widx] = *p_evt;
     m_evt_dispatch.widx = next_widx;
     irq_unlock(primask);
+    return true;
+}
+
+static bool ble_evt_post(const ble_deferred_evt_t *p_evt)
+{
+    if (!ble_evt_queue_push(p_evt))
+    {
+        return false;
+    }
+
+    NVIC_SetPendingIRQ(SWI1_EGU1_IRQn);
     return true;
 }
 
@@ -119,45 +96,6 @@ static void ble_evt_init(ble_evt_t *p_evt, ble_evt_type_t evt_type)
     p_evt->supervision_timeout_ms = m_link.supervision_timeout_ms;
 }
 
-static ble_deferred_evt_kind_t ble_stack_evt_kind_get(ble_evt_type_t evt_type)
-{
-    return (evt_type == BLE_GATT_EVT_MTU_EXCHANGE) ?
-               BLE_DEFERRED_EVT_KIND_GATT :
-               BLE_DEFERRED_EVT_KIND_GAP;
-}
-
-void diag_packet_trace_push(bool tx,
-                            bool is_new_tx,
-                            bool retransmit,
-                            bool rx_new,
-                            uint8_t header,
-                            uint8_t len)
-{
-    uint8_t next_widx;
-
-    if (m_diag.packet_budget == 0U)
-    {
-        return;
-    }
-
-    next_widx = (uint8_t)((m_diag.packet_q_widx + 1U) & 0x0FU);
-    if (next_widx == m_diag.packet_q_ridx)
-    {
-        return;
-    }
-
-    m_diag.packet_q[m_diag.packet_q_widx].tx = tx;
-    m_diag.packet_q[m_diag.packet_q_widx].is_new_tx = is_new_tx;
-    m_diag.packet_q[m_diag.packet_q_widx].retransmit = retransmit;
-    m_diag.packet_q[m_diag.packet_q_widx].rx_new = rx_new;
-    m_diag.packet_q[m_diag.packet_q_widx].llid = (uint8_t)(header & 0x03U);
-    m_diag.packet_q[m_diag.packet_q_widx].nesn = (uint8_t)((header >> 2U) & 0x01U);
-    m_diag.packet_q[m_diag.packet_q_widx].sn = (uint8_t)((header >> 3U) & 0x01U);
-    m_diag.packet_q[m_diag.packet_q_widx].len = len;
-    m_diag.packet_q_widx = next_widx;
-    m_diag.packet_budget--;
-}
-
 uint16_t u16_decode(const uint8_t *p_src)
 {
     return (uint16_t)p_src[0] | ((uint16_t)p_src[1] << 8);
@@ -165,7 +103,7 @@ uint16_t u16_decode(const uint8_t *p_src)
 
 uint8_t adv_pdu_type_get(const ble_ll_adv_pdu_t *p_pdu)
 {
-    return (uint8_t)(p_pdu->header & 0x0FU);
+    return p_pdu->header.pdu_type;
 }
 
 static bool addr_is_all(const uint8_t *addr, uint8_t value)
@@ -201,8 +139,7 @@ bool ble_evt_notify_gap(ble_evt_type_t evt_type)
 {
     ble_deferred_evt_t evt;
 
-    if ((m_evt_handler == NULL) ||
-        (ble_stack_evt_kind_get(evt_type) != BLE_DEFERRED_EVT_KIND_GAP))
+    if ((m_evt_handler == NULL) || (evt_type == BLE_GATT_EVT_MTU_EXCHANGE))
     {
         return false;
     }

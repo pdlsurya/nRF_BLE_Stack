@@ -49,7 +49,6 @@ typedef struct
 
 typedef struct
 {
-    const char *p_adv_name;
     uint8_t flags;
     int8_t tx_power;
     uint16_t interval_ms;
@@ -126,18 +125,6 @@ typedef struct
     uint16_t effective_mtu;
 } ble_evt_t;
 
-typedef struct
-{
-    bool tx;
-    bool is_new_tx;
-    bool retransmit;
-    bool rx_new;
-    uint8_t llid;
-    uint8_t sn;
-    uint8_t nesn;
-    uint8_t len;
-} ble_diag_packet_trace_t;
-
 typedef void (*ble_evt_handler_t)(const ble_evt_t *p_evt);
 
 void ble_start_advertising(void);
@@ -145,16 +132,13 @@ void ble_stop_advertising(void);
 void ble_stack_init(void);
 void ble_register_evt_handler(ble_evt_handler_t handler);
 void ble_adv_init(const ble_adv_config_t *p_config);
-void ble_gap_init(const ble_gap_conn_params_t *p_params);
+void ble_gap_set_device_name(const char *p_name);
+void ble_gap_set_conn_params(const ble_gap_conn_params_t *p_params);
 bool ble_gatt_server_init(ble_gatt_service_t *p_services,
                           uint8_t service_count);
 bool ble_is_connected(void);
 bool ble_characteristic_notifications_enabled(const ble_gatt_characteristic_t *p_characteristic);
 bool ble_notify_characteristic(const ble_gatt_characteristic_t *p_characteristic);
 void ble_disconnect(void);
-bool ble_diag_take_first_data_packet(void);
-bool ble_diag_take_first_ctrl_opcode(uint8_t *p_opcode);
-bool ble_diag_take_first_att_opcode(uint8_t *p_opcode);
-bool ble_diag_take_packet_trace(ble_diag_packet_trace_t *p_trace);
 
 #endif // NRF_BLE_H__

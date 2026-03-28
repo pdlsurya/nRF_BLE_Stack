@@ -24,7 +24,6 @@ static const ble_gap_conn_params_t m_gap_conn_params_default = {
 };
 
 static const ble_adv_config_t m_adv_config_default = {
-    .p_adv_name = NULL,
     .flags = 0x06U,
     .tx_power = 0,
     .interval_ms = BLE_ADV_INTERVAL_MS_DEFAULT,
@@ -32,32 +31,12 @@ static const ble_adv_config_t m_adv_config_default = {
     .p_service_data = NULL,
 };
 
-static bool ble_diag_take_u8(volatile uint8_t *p_queue,
-                             volatile uint8_t *p_ridx,
-                             uint8_t widx,
-                             uint8_t mask,
-                             uint8_t *p_value)
-{
-    uint8_t ridx;
-
-    ridx = *p_ridx;
-    if ((p_value == NULL) || (ridx == widx))
-    {
-        return false;
-    }
-
-    *p_value = p_queue[ridx];
-    *p_ridx = (uint8_t)((ridx + 1U) & mask);
-    return true;
-}
-
-static void ble_adv_name_set(const char *p_name)
+void ble_gap_set_device_name(const char *p_name)
 {
     size_t name_len;
 
     m_host.adv_name[0] = '\0';
     m_host.adv_name_len = 0U;
-    m_host.has_adv_name = false;
 
     if ((p_name == NULL) || (p_name[0] == '\0'))
     {
@@ -77,7 +56,6 @@ static void ble_adv_name_set(const char *p_name)
     (void)memcpy(m_host.adv_name, p_name, name_len);
     m_host.adv_name[name_len] = '\0';
     m_host.adv_name_len = (uint8_t)name_len;
-    m_host.has_adv_name = true;
 }
 
 bool ble_is_connected(void)
@@ -88,43 +66,6 @@ bool ble_is_connected(void)
 bool ble_characteristic_notifications_enabled(const ble_gatt_characteristic_t *p_characteristic)
 {
     return ble_gatt_server_notifications_enabled(p_characteristic);
-}
-
-bool ble_diag_take_first_data_packet(void)
-{
-    bool pending = m_diag.first_data_pending;
-    m_diag.first_data_pending = false;
-    return pending;
-}
-
-bool ble_diag_take_first_ctrl_opcode(uint8_t *p_opcode)
-{
-    return ble_diag_take_u8(m_diag.ctrl_opcode_q,
-                            &m_diag.ctrl_q_ridx,
-                            m_diag.ctrl_q_widx,
-                            0x07U,
-                            p_opcode);
-}
-
-bool ble_diag_take_first_att_opcode(uint8_t *p_opcode)
-{
-    return ble_diag_take_u8(m_diag.att_opcode_q,
-                            &m_diag.att_q_ridx,
-                            m_diag.att_q_widx,
-                            0x07U,
-                            p_opcode);
-}
-
-bool ble_diag_take_packet_trace(ble_diag_packet_trace_t *p_trace)
-{
-    if ((p_trace == NULL) || (m_diag.packet_q_ridx == m_diag.packet_q_widx))
-    {
-        return false;
-    }
-
-    *p_trace = m_diag.packet_q[m_diag.packet_q_ridx];
-    m_diag.packet_q_ridx = (uint8_t)((m_diag.packet_q_ridx + 1U) & 0x0FU);
-    return true;
 }
 
 void ble_disconnect(void)
@@ -149,7 +90,6 @@ void ble_stack_init(void)
     m_controller = (ble_controller_t){.adv_timer_created = adv_timer_created};
     m_link = (ble_link_t){0};
     m_ctrl_rt = (ble_ctrl_runtime_t){0};
-    m_diag = (ble_diag_state_t){0};
     m_evt_handler = NULL;
     controller_load_identity_address();
 
@@ -159,24 +99,25 @@ void ble_stack_init(void)
 
 void ble_adv_init(const ble_adv_config_t *p_config)
 {
-    const ble_adv_config_t *p_active = (p_config != NULL) ? p_config : &m_adv_config_default;
-
-    m_host.flags = p_active->flags;
-    m_host.tx_power = p_active->tx_power;
-    m_host.adv_interval_ms = (p_active->interval_ms != 0U) ? p_active->interval_ms : BLE_ADV_INTERVAL_MS_DEFAULT;
-    m_host.included_service_uuid = p_active->included_service_uuid;
-    m_host.has_included_service_uuid = (p_active->included_service_uuid != 0U);
-    m_host.has_service_data = false;
-    ble_adv_name_set(p_active->p_adv_name);
-
-    if (p_active->p_service_data != NULL)
+    if (p_config == NULL)
     {
-        m_host.service_data = *p_active->p_service_data;
+        p_config = &m_adv_config_default;
+    }
+
+    m_host.flags = p_config->flags;
+    m_host.tx_power = p_config->tx_power;
+    m_host.adv_interval_ms = (p_config->interval_ms != 0U) ? p_config->interval_ms : BLE_ADV_INTERVAL_MS_DEFAULT;
+    m_host.included_service_uuid = p_config->included_service_uuid;
+    m_host.has_service_data = false;
+
+    if (p_config->p_service_data != NULL)
+    {
+        m_host.service_data = *p_config->p_service_data;
         m_host.has_service_data = true;
     }
 }
 
-void ble_gap_init(const ble_gap_conn_params_t *p_params)
+void ble_gap_set_conn_params(const ble_gap_conn_params_t *p_params)
 {
     m_host.gap_conn_params = (p_params != NULL) ? *p_params : m_gap_conn_params_default;
 }

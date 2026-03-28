@@ -49,6 +49,22 @@
 #define BLE_LL_COMPANY_ID_NORDIC 0x0059U
 #define BLE_LL_SUBVERSION 0x0000U
 
+static inline uint32_t irq_lock(void)
+{
+    uint32_t primask = __get_PRIMASK();
+
+    __disable_irq();
+    return primask;
+}
+
+static inline void irq_unlock(uint32_t primask)
+{
+    if (primask == 0U)
+    {
+        __enable_irq();
+    }
+}
+
 typedef enum
 {
     LL_ADV_IND = 0x00,
@@ -78,11 +94,19 @@ typedef enum
 
 typedef struct
 {
-    uint8_t header;
+    uint8_t pdu_type : 4;
+    uint8_t rfu : 2;
+    uint8_t txadd : 1;
+    uint8_t rxadd : 1;
+} __attribute__((packed)) ble_ll_adv_header_t;
+
+typedef struct
+{
+    ble_ll_adv_header_t header;
     uint8_t payload_length;
     uint8_t mac_address[6];
     uint8_t payload[128];
-} ble_ll_adv_pdu_t;
+} __attribute__((packed)) ble_ll_adv_pdu_t;
 
 typedef struct
 {
@@ -100,7 +124,7 @@ typedef struct
 
 typedef struct
 {
-    uint8_t header;
+    ble_ll_adv_header_t header;
     uint8_t payload_length;
     uint8_t initiator_address[6];
     uint8_t advertiser_address[6];
@@ -109,14 +133,22 @@ typedef struct
 
 typedef struct
 {
-    uint8_t header;
-    uint8_t length;
-    uint8_t payload[251];
-} ble_ll_data_raw_pdu_t;
+    uint8_t llid : 2;
+    uint8_t nesn : 1;
+    uint8_t sn : 1;
+    uint8_t md : 1;
+    uint8_t rfu : 3;
+} __attribute__((packed)) ble_ll_data_header_t;
 
 typedef struct
 {
-    uint8_t adv_channel_index;
+    ble_ll_data_header_t header;
+    uint8_t length;
+    uint8_t payload[251];
+} __attribute__((packed)) ble_ll_data_raw_pdu_t;
+
+typedef struct
+{
     bool advertising;
     bool adv_timer_created;
 } ble_controller_t;
@@ -127,7 +159,6 @@ typedef struct
     uint16_t conn_interval_ms;
     uint32_t conn_interval_us;
     uint16_t supervision_timeout_ms;
-    uint16_t window_offset_ms;
     uint8_t hop_increment;
     uint8_t channel_count;
     uint8_t channel_map[5];
@@ -143,7 +174,6 @@ typedef struct
     bool event_anchor_captured;
     uint16_t missed_interval_count;
     uint16_t event_counter;
-    bool first_data_rx_logged;
     bool pending_channel_map_valid;
     uint16_t pending_channel_map_instant;
     uint8_t pending_channel_map[5];
@@ -151,15 +181,12 @@ typedef struct
 
 typedef struct
 {
-    uint8_t adv_data_len;
     char adv_name[BLE_ADV_NAME_MAX_LEN + 1U];
     uint8_t adv_name_len;
     uint8_t flags;
     int8_t tx_power;
     uint16_t adv_interval_ms;
     uint16_t included_service_uuid;
-    bool has_adv_name;
-    bool has_included_service_uuid;
     bool has_service_data;
     ble_service_data_t service_data;
     ble_gap_conn_params_t gap_conn_params;
@@ -180,21 +207,6 @@ typedef struct
     bool conn_timer_initialized;
     uint32_t conn_next_event_tick_us;
 } ble_ctrl_runtime_t;
-
-typedef struct
-{
-    volatile bool first_data_pending;
-    volatile uint8_t ctrl_opcode_q[8];
-    volatile uint8_t ctrl_q_widx;
-    volatile uint8_t ctrl_q_ridx;
-    volatile uint8_t att_opcode_q[8];
-    volatile uint8_t att_q_widx;
-    volatile uint8_t att_q_ridx;
-    volatile ble_diag_packet_trace_t packet_q[16];
-    volatile uint8_t packet_q_widx;
-    volatile uint8_t packet_q_ridx;
-    uint8_t packet_budget;
-} ble_diag_state_t;
 
 typedef enum
 {
@@ -233,21 +245,12 @@ extern const uint8_t m_adv_access_address[4];
 extern const uint8_t m_data_channel_freq[37];
 extern const uint32_t m_ble_crc_poly;
 extern const uint32_t m_adv_crc_init;
-extern const uint8_t BLE_CONNECT_REQ_HOP_SCA_OFFSET;
-
 extern ble_host_t m_host;
 extern ble_controller_t m_controller;
 extern ble_link_t m_link;
 extern ble_evt_handler_t m_evt_handler;
 extern ble_ctrl_runtime_t m_ctrl_rt;
-extern ble_diag_state_t m_diag;
 
-void diag_packet_trace_push(bool tx,
-                            bool is_new_tx,
-                            bool retransmit,
-                            bool rx_new,
-                            uint8_t header,
-                            uint8_t len);
 uint16_t u16_decode(const uint8_t *p_src);
 uint8_t adv_pdu_type_get(const ble_ll_adv_pdu_t *p_pdu);
 void u16_encode(uint16_t value, uint8_t *p_dst);

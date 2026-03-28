@@ -22,16 +22,17 @@ static void counter_char_evt_handler(const ble_gatt_evt_t *p_evt);
 static void text_char_evt_handler(const ble_gatt_evt_t *p_evt);
 static void ble_evt_handler(const ble_evt_t *p_evt);
 static void ble_state_set(bool connected);
+static void gap_init(void);
 static void start_advertising(void);
 static uint32_t timer_ticks_clamped(uint32_t ms);
 static void timer_stop_if_started(app_timer_id_t timer_id);
 
+static const char m_dev_name[] = "nrf52-ble";
 static uint8_t m_counter_char_value; 
 static uint16_t m_counter_char_value_len = 1U;
 static char m_text_char_value[BLE_GATT_MAX_VALUE_LEN] = "";
 static uint16_t m_text_char_value_len = 0U;
 static const ble_adv_config_t m_adv_config = {
-  .p_adv_name = "nrf52-ble",
   .flags = 0x06,
   .tx_power = 0x08,
   .interval_ms = 100U,
@@ -137,6 +138,12 @@ static void ble_state_set(bool connected)
 
   bsp_board_led_on(BLE_ADV_LED_IDX);
   bsp_board_led_off(BLE_CONNECTED_LED_IDX);
+}
+
+static void gap_init(void)
+{
+  ble_gap_set_device_name(m_dev_name);
+  ble_gap_set_conn_params(&m_gap_conn_params);
 }
 
 static void start_advertising(void)
@@ -282,8 +289,8 @@ int main(void)
 
   ble_stack_init();
   ble_register_evt_handler(ble_evt_handler);
+  gap_init();
   ble_adv_init(&m_adv_config);
-  ble_gap_init(&m_gap_conn_params);
   APP_ERROR_CHECK_BOOL(ble_gatt_server_init(m_custom_services,
                                             (uint8_t)(sizeof(m_custom_services) / sizeof(m_custom_services[0]))));
 
