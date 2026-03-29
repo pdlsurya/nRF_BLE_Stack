@@ -18,8 +18,8 @@
 
 typedef enum
 {
-	MODE_TX,
-	MODE_RX
+	RADIO_MODE_TX,
+	RADIO_MODE_RX
 } radio_mode_t;
 
 typedef void (*radio_event_handler_t)(void);
@@ -68,8 +68,6 @@ typedef enum
 void radio_set_event_handler(radio_event_handler_t handler);
 
 void radio_set_mode(radio_mode_t mode);
-
-void radio_tx();
 
 void radio_rx();
 

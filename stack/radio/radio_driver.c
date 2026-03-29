@@ -43,10 +43,10 @@ void radio_set_mode(radio_mode_t mode)
 
     switch (mode)
     {
-    case MODE_TX:
+    case RADIO_MODE_TX:
         radio_tx_enable();
         break;
-    case MODE_RX:
+    case RADIO_MODE_RX:
         radio_rx_enable();
         break;
     default:
@@ -61,7 +61,7 @@ void radio_tx()
 {
     if (radio_get_state() != TX_IDLE)
     {
-        radio_set_mode(MODE_TX);
+        radio_set_mode(RADIO_MODE_TX);
     }
 
     radio_start();
@@ -76,7 +76,7 @@ void radio_rx()
 {
     if (radio_get_state() != RX_IDLE)
     {
-        radio_set_mode(MODE_RX);
+        radio_set_mode(RADIO_MODE_RX);
     }
 
     radio_clear_crc_events();
@@ -90,7 +90,7 @@ void radio_tx_rx()
     radio_set_shorts(0U);
     if (radio_get_state() != TX_IDLE)
     {
-        radio_set_mode(MODE_TX);
+        radio_set_mode(RADIO_MODE_TX);
     }
     radio_clear_crc_events();
     radio_clear_end_event();

@@ -357,7 +357,6 @@ static void controller_prepare_radio_for_adv(void)
                                     m_adv_access_address,
                                     m_adv_crc_init,
                                     (uint32_t)&m_ctrl_rt.air_pdu);
-    controller_set_adv_channel(0U);
 }
 
 static void controller_prepare_radio_for_connection(void)
@@ -366,7 +365,6 @@ static void controller_prepare_radio_for_connection(void)
                                     m_link.access_address,
                                     m_link.crc_init,
                                     (uint32_t)&m_ctrl_rt.conn_rx_pdu);
-    controller_set_data_channel(m_link.channels[m_link.current_channel_index]);
 }
 
 void controller_disconnect_internal(void)
@@ -510,66 +508,27 @@ bool controller_queue_att_payload(const uint8_t *p_att_payload, uint16_t att_len
 
 static void controller_prepare_pending_pdu_for_tx(void)
 {
-    m_ctrl_rt.conn_tx_pdu.header = controller_conn_header(m_ctrl_rt.pending_conn_tx_pdu.header.llid);
-    m_ctrl_rt.conn_tx_pdu.length = m_ctrl_rt.pending_conn_tx_pdu.length;
-    if (m_ctrl_rt.pending_conn_tx_pdu.length > 0U)
-    {
-        (void)memcpy(m_ctrl_rt.conn_tx_pdu.payload,
-                     m_ctrl_rt.pending_conn_tx_pdu.payload,
-                     m_ctrl_rt.pending_conn_tx_pdu.length);
-    }
+    m_ctrl_rt.conn_tx_pdu = m_ctrl_rt.pending_conn_tx_pdu;
+    m_ctrl_rt.conn_tx_pdu.header = controller_conn_header(m_ctrl_rt.conn_tx_pdu.header.llid);
 }
 
 static void controller_send_conn_response(bool new_tx_pdu)
 {
-    uint32_t tx_ptr;
+    uint32_t tx_ptr = (new_tx_pdu || !m_ctrl_rt.has_last_conn_tx_pdu) ?
+                          (uint32_t)&m_ctrl_rt.conn_tx_pdu :
+                          (uint32_t)&m_ctrl_rt.last_conn_tx_pdu;
 
     if (!m_link.connected)
     {
         return;
     }
 
-    if ((!new_tx_pdu) && m_ctrl_rt.has_last_conn_tx_pdu)
-    {
-        tx_ptr = (uint32_t)&m_ctrl_rt.last_conn_tx_pdu;
-    }
-    else
-    {
-        tx_ptr = (uint32_t)&m_ctrl_rt.conn_tx_pdu;
-    }
-
-    /* RX phase uses END->DISABLE. Wait until radio reaches DISABLED first. */
-    radio_wait_disabled();
-    radio_clear_disabled_event();
-
-    /*
-     * The peer listens for the slave response after the 150 us BLE inter-frame
-     * spacing. With fast ramp-up enabled, hold TXEN briefly so START lands in
-     * that listening window instead of too early.
-     */
-    nrf_delay_us(BLE_CONN_TXEN_DELAY_US);
-
     /* TX with READY->START and END->DISABLE for deterministic turnaround. */
-    radio_set_shorts(RADIO_SHORTS_READY_START_Msk |
-                     RADIO_SHORTS_END_DISABLE_Msk);
-    radio_clear_ready_event();
-    radio_clear_end_event();
+    radio_set_shorts(RADIO_SHORTS_READY_START_Msk | RADIO_SHORTS_END_DISABLE_Msk);
     radio_set_packet_ptr(tx_ptr);
-    radio_tx_enable();
-    radio_wait_end();
-    radio_clear_end_event();
-    radio_wait_disabled();
-    radio_clear_disabled_event();
+    radio_set_mode(RADIO_MODE_TX);
 
-    /* Back to RX; keep END->DISABLE for the next RX packet turn-around. */
-    radio_set_shorts(RADIO_SHORTS_END_DISABLE_Msk);
-    m_ctrl_rt.conn_rx_pdu.header = (ble_ll_data_header_t){0};
-    m_ctrl_rt.conn_rx_pdu.length = 0U;
-    radio_set_packet_ptr((uint32_t)&m_ctrl_rt.conn_rx_pdu);
-    radio_rx_enable();
-    radio_wait_ready();
-    radio_clear_ready_event();
-    radio_start();
+    /* This stack handles one RX/TX exchange per connection event. */
 
     if (new_tx_pdu)
     {
@@ -587,11 +546,11 @@ static void controller_start_connection_event(void)
     }
 
     controller_hop_data_channel();
-    radio_disable();
-    radio_set_shorts(RADIO_SHORTS_END_DISABLE_Msk);
+    m_ctrl_rt.conn_rx_pdu.header = (ble_ll_data_header_t){0};
+    m_ctrl_rt.conn_rx_pdu.length = 0U;
+    radio_set_shorts(RADIO_SHORTS_READY_START_Msk | RADIO_SHORTS_END_DISABLE_Msk);
     radio_set_packet_ptr((uint32_t)&m_ctrl_rt.conn_rx_pdu);
-    radio_set_mode(MODE_RX);
-    radio_rx();
+    radio_set_mode(RADIO_MODE_RX);
 }
 
 static void adv_timer_handler(void *p_context)
@@ -796,7 +755,6 @@ static void ble_advertise(void)
         }
 
         controller_set_adv_channel(ch);
-        radio_set_mode(MODE_TX);
         radio_tx_rx();
 
         /* Keep RX open long enough for SCAN_REQ/CONNECT_REQ + margin. */
@@ -810,8 +768,6 @@ static void ble_advertise(void)
         radio_disable();
         radio_set_shorts(0U);
     }
-
-    controller_set_adv_channel(0U);
 }
 
 void ble_start_advertising(void)
@@ -872,7 +828,6 @@ void controller_runtime_init(void)
     radio_configure_modecnf0(RADIO_RAMP_UP_FAST, RADIO_DEFAULT_TX_B1);
     radio_set_tifs(150U);
     controller_conn_timer_init();
-    controller_prepare_radio_for_adv();
     radio_set_event_handler(radio_evt_handler);
     radio_enable_interrupts();
 }
