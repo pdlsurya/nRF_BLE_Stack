@@ -15,13 +15,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define NRF_TEMPERATURE_SERVICE_UUID 0x1809
-#define NRF_BATTERY_SERVICE_UUID 0x180F
-#define NRF_DEVICE_INFORMATION_SERVICE_UUID 0x180A
-#define NRF_HEART_RATE_SERVICE_UUID 0x180D
-#define NRF_CUSTOM_SERVICE_UUID 0xFFF0
-#define NRF_CUSTOM_COUNTER_CHAR_UUID 0xFFF1
-#define NRF_CUSTOM_TEXT_CHAR_UUID 0xFFF2
 #define BLE_GATT_MAX_VALUE_LEN 20U
 #define BLE_GATT_MAX_SERVICES 4U
 #define BLE_GATT_MAX_CHARACTERISTICS 8U
@@ -30,16 +23,7 @@
 #define BLE_GATT_CHAR_PROP_WRITE 0x08U
 #define BLE_GATT_CHAR_PROP_NOTIFY 0x10U
 
-#define BLE_1P25MS_UNITS_TO_MS(units) ((units) * 125 / 100)
-#define BLE_MS_TO_1P25MS_UNITS(ms) ((ms) * 100 / 125)
-
-#define BLE_10MS_UNITS_TO_MS(units) ((units) * 10)
-#define BLE_MS_TO_10MS_UNITS(ms) ((ms) / 10)
 #define BLE_ADV_INTERVAL_MS_DEFAULT 100U
-#define BLE_GAP_CONN_INTERVAL_MIN_DEFAULT_UNITS 16U
-#define BLE_GAP_CONN_INTERVAL_MAX_DEFAULT_UNITS 60U
-#define BLE_GAP_CONN_SLAVE_LATENCY_DEFAULT 0U
-#define BLE_GAP_CONN_SUP_TIMEOUT_DEFAULT_UNITS 400U
 
 typedef struct
 {
@@ -55,14 +39,6 @@ typedef struct
     uint16_t included_service_uuid;
     const ble_service_data_t *p_service_data;
 } ble_adv_config_t;
-
-typedef struct
-{
-    uint16_t min_conn_interval_units;
-    uint16_t max_conn_interval_units;
-    uint16_t slave_latency;
-    uint16_t supervision_timeout_units;
-} ble_gap_conn_params_t;
 
 typedef struct ble_gatt_characteristic_s ble_gatt_characteristic_t;
 
@@ -128,17 +104,13 @@ typedef struct
 typedef void (*ble_evt_handler_t)(const ble_evt_t *p_evt);
 
 void ble_start_advertising(void);
-void ble_stop_advertising(void);
 void ble_stack_init(void);
 void ble_register_evt_handler(ble_evt_handler_t handler);
 void ble_adv_init(const ble_adv_config_t *p_config);
 void ble_gap_set_device_name(const char *p_name);
-void ble_gap_set_conn_params(const ble_gap_conn_params_t *p_params);
 bool ble_gatt_server_init(ble_gatt_service_t *p_services,
                           uint8_t service_count);
 bool ble_is_connected(void);
-bool ble_characteristic_notifications_enabled(const ble_gatt_characteristic_t *p_characteristic);
 bool ble_notify_characteristic(const ble_gatt_characteristic_t *p_characteristic);
-void ble_disconnect(void);
 
 #endif // NRF_BLE_H__

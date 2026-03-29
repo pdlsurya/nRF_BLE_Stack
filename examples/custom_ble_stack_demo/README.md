@@ -5,7 +5,7 @@ Example BLE peripheral application for `nRF_BLE_Stack`.
 This example:
 
 - initializes the stack
-- configures GAP advertising and preferred connection parameters
+- configures GAP advertising and device name
 - registers a custom GATT service with a counter characteristic and a text characteristic
 - sends periodic notifications while connected
 - logs GAP and GATT activity over USB CDC ACM

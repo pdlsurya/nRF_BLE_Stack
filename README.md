@@ -19,7 +19,8 @@ packet flow is easy to follow in code.
 - GATT write and notification-state callbacks
 - Deferred BLE events through low-priority software interrupt
 - Fixed ATT MTU of 23
-- Single pending notification TX slot
+- One RX and one TX exchange per connection interval
+- Single pending ATT TX slot for notifications and ATT responses
 
 ## Repository Layout
 
@@ -46,12 +47,10 @@ Main application-facing entry points:
 - `ble_register_evt_handler()`
 - `ble_adv_init()`
 - `ble_gap_set_device_name()`
-- `ble_gap_set_conn_params()`
 - `ble_gatt_server_init()`
 - `ble_start_advertising()`
-- `ble_stop_advertising()`
 - `ble_notify_characteristic()`
-- `ble_disconnect()`
+- `ble_is_connected()`
 
 See [nrf_ble.h](stack/include/nrf_ble.h) for the full public interface.
 
@@ -87,7 +86,7 @@ See [nrf_ble.h](stack/include/nrf_ble.h) for the full public interface.
   `evt_handler`.
 - Both stack-level and characteristic-level callbacks are deferred to
   low-priority software interrupt context instead of being called directly from
-  the radio ISR path.
+  the radio ISR path, so application callbacks do not run from the radio ISR.
 
 ## Example
 
@@ -133,8 +132,7 @@ int main(void)
 {
     ble_stack_init();
     ble_register_evt_handler(ble_evt_handler);
-    ble_gap_set_device_name("nrf52-ble");
-    ble_gap_set_conn_params(&gap_params);
+    ble_gap_set_device_name("nrf-ble");
     ble_adv_init(&adv_config);
     APP_ERROR_CHECK_BOOL(ble_gatt_server_init(services, service_count));
     ble_start_advertising();
@@ -156,7 +154,7 @@ The normal peripheral flow is:
 4. `ble_gatt_server_init()` builds the ATT database from the application's service table.
 5. `ble_start_advertising()` starts repeated advertising events on channels 37, 38, and 39.
 6. When a `CONNECT_REQ` is received, the controller switches to connected mode and starts connection-event timing with `TIMER2`.
-7. ATT requests are parsed by `ble_gatt_server_process_request()`, and any responses are queued for the next connection event.
+7. Each connection interval is handled as one RX and one TX exchange. Any ATT response or notification generated from the received packet is queued for the next connection event.
 8. Stack-level BLE events and characteristic callbacks are delivered later from `SWI1_EGU1_IRQHandler()`.
 
 ## Design Notes
@@ -167,7 +165,8 @@ The normal peripheral flow is:
 - `ble_controller.c` owns BLE packet flow and timing.
 - `radio_driver.c` owns direct `NRF_RADIO` access.
 - The stack keeps ATT MTU fixed at 23 to avoid adding L2CAP fragmentation and reassembly logic.
-- Notifications use a single pending connected TX slot, which keeps the controller flow simple and easy to trace.
+- The connected data path intentionally uses a simple one-RX / one-TX-per-interval model.
+- Notifications and ATT responses share a single pending connected TX slot, which keeps the controller flow simple and easy to trace.
 
 ## Limitations
 
@@ -175,7 +174,7 @@ The normal peripheral flow is:
 - No L2CAP fragmentation or reassembly
 - No security, pairing, or bonding
 - No long writes or prepare/execute write support
-- Preferred GAP connection parameters are stored but not actively negotiated on-air
+- No active connection parameter update procedure
 
 ## Documentation
 

@@ -11,6 +11,10 @@
 
 APP_TIMER_DEF(m_measurement_timer_id);
 
+#define CUSTOM_SERVICE_UUID      0xFFF0
+#define CUSTOM_COUNTER_CHAR_UUID 0xFFF1
+#define CUSTOM_TEXT_CHAR_UUID    0xFFF2
+
 #define BLE_ADV_LED_IDX       BSP_BOARD_LED_0
 #if (LEDS_NUMBER > 1)
 #define BLE_CONNECTED_LED_IDX BSP_BOARD_LED_3
@@ -22,7 +26,6 @@ static void counter_char_evt_handler(const ble_gatt_evt_t *p_evt);
 static void text_char_evt_handler(const ble_gatt_evt_t *p_evt);
 static void ble_evt_handler(const ble_evt_t *p_evt);
 static void ble_state_set(bool connected);
-static void gap_init(void);
 static void start_advertising(void);
 static uint32_t timer_ticks_clamped(uint32_t ms);
 static void timer_stop_if_started(app_timer_id_t timer_id);
@@ -36,19 +39,13 @@ static const ble_adv_config_t m_adv_config = {
   .flags = 0x06,
   .tx_power = 0x08,
   .interval_ms = 100U,
-  .included_service_uuid = NRF_CUSTOM_SERVICE_UUID,
+  .included_service_uuid = CUSTOM_SERVICE_UUID,
   .p_service_data = NULL,
-};
-static const ble_gap_conn_params_t m_gap_conn_params = {
-  .min_conn_interval_units = BLE_MS_TO_1P25MS_UNITS(20U),
-  .max_conn_interval_units = BLE_MS_TO_1P25MS_UNITS(75U),
-  .slave_latency = 0U,
-  .supervision_timeout_units = BLE_MS_TO_10MS_UNITS(4000U),
 };
 
 static ble_gatt_characteristic_t m_custom_characteristics[] = {
     {
-        .uuid = NRF_CUSTOM_COUNTER_CHAR_UUID,
+        .uuid = CUSTOM_COUNTER_CHAR_UUID,
         .properties = (uint8_t)(BLE_GATT_CHAR_PROP_READ | BLE_GATT_CHAR_PROP_NOTIFY),
         .p_value = &m_counter_char_value,
         .p_value_len = &m_counter_char_value_len,
@@ -58,7 +55,7 @@ static ble_gatt_characteristic_t m_custom_characteristics[] = {
         .cccd_handle = 0U,
     },
     {
-        .uuid = NRF_CUSTOM_TEXT_CHAR_UUID,
+        .uuid = CUSTOM_TEXT_CHAR_UUID,
         .properties = (uint8_t)(BLE_GATT_CHAR_PROP_READ |
                                 BLE_GATT_CHAR_PROP_WRITE |
                                 BLE_GATT_CHAR_PROP_WRITE_NO_RESP),
@@ -73,7 +70,7 @@ static ble_gatt_characteristic_t m_custom_characteristics[] = {
 
 static ble_gatt_service_t m_custom_services[] = {
     {
-        .uuid = NRF_CUSTOM_SERVICE_UUID,
+        .uuid = CUSTOM_SERVICE_UUID,
         .p_characteristics = m_custom_characteristics,
         .characteristic_count = (uint8_t)(sizeof(m_custom_characteristics) / sizeof(m_custom_characteristics[0])),
         .service_handle = 0U,
@@ -138,12 +135,6 @@ static void ble_state_set(bool connected)
 
   bsp_board_led_on(BLE_ADV_LED_IDX);
   bsp_board_led_off(BLE_CONNECTED_LED_IDX);
-}
-
-static void gap_init(void)
-{
-  ble_gap_set_device_name(m_dev_name);
-  ble_gap_set_conn_params(&m_gap_conn_params);
 }
 
 static void start_advertising(void)
@@ -289,7 +280,7 @@ int main(void)
 
   ble_stack_init();
   ble_register_evt_handler(ble_evt_handler);
-  gap_init();
+  ble_gap_set_device_name(m_dev_name);
   ble_adv_init(&m_adv_config);
   APP_ERROR_CHECK_BOOL(ble_gatt_server_init(m_custom_services,
                                             (uint8_t)(sizeof(m_custom_services) / sizeof(m_custom_services[0]))));

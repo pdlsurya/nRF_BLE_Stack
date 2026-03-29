@@ -44,7 +44,7 @@
 #define BLE_LL_CTRL_LENGTH_RSP 0x15U
 #define BLE_LL_CTRL_PHY_REQ 0x16U
 #define BLE_LL_CTRL_PHY_RSP 0x17U
-#define BLE_LL_VERSION_5_0 0x09U
+#define BLE_LL_VERSION_4_2 0x08U
 #define BLE_LL_COMPANY_ID_NORDIC 0x0059U
 #define BLE_LL_SUBVERSION 0x0000U
 
@@ -67,25 +67,11 @@ static inline void irq_unlock(uint32_t primask)
 typedef enum
 {
     LL_ADV_IND = 0x00,
-    LL_ADV_DIRECT_IND,
-    LL_ADV_NONCONN_IND,
-    LL_SCAN_REQ,
-    LL_SCAN_RSP,
-    LL_CONNECT_REQ,
-    LL_ADV_SCAN_IND,
-    LL_AUX_ADV_IND,
-    LL_AUX_SCAN_REQ,
-    LL_AUX_SCAN_RSP,
-    LL_AUX_CONNECT_REQ,
-    LL_AUX_CHAIN_IND,
-    LL_AUX_SYNC_IND,
-    LL_AUX_SYNC_INFO,
-    LL_AUX_CONNECT_RSP
+    LL_CONNECT_REQ = 0x05
 } ble_adv_pdu_type_t;
 
 typedef enum
 {
-    BLE_LLID_RESERVED = 0x00,
     BLE_LLID_CONTINUATION = 0x01,
     BLE_LLID_START_L2CAP = 0x02,
     BLE_LLID_CONTROL_PDU = 0x03
@@ -148,12 +134,6 @@ typedef struct
 
 typedef struct
 {
-    bool advertising;
-    bool adv_timer_created;
-} ble_controller_t;
-
-typedef struct
-{
     bool connected;
     uint16_t conn_interval_ms;
     uint32_t conn_interval_us;
@@ -162,7 +142,6 @@ typedef struct
     uint8_t channel_count;
     uint8_t channel_map[5];
     uint8_t last_unmapped_channel;
-    uint8_t current_channel_index;
     uint8_t channels[37];
     uint8_t access_address[4];
     uint32_t crc_init;
@@ -170,7 +149,6 @@ typedef struct
     uint8_t tx_sn;
     bool supervision_started;
     bool rx_seen_this_interval;
-    bool event_anchor_captured;
     uint16_t missed_interval_count;
     uint16_t event_counter;
     bool pending_channel_map_valid;
@@ -181,14 +159,11 @@ typedef struct
 typedef struct
 {
     char adv_name[BLE_ADV_NAME_MAX_LEN + 1U];
-    uint8_t adv_name_len;
     uint8_t flags;
     int8_t tx_power;
     uint16_t adv_interval_ms;
     uint16_t included_service_uuid;
-    bool has_service_data;
     ble_service_data_t service_data;
-    ble_gap_conn_params_t gap_conn_params;
 } ble_host_t;
 
 typedef struct
@@ -200,10 +175,8 @@ typedef struct
     ble_ll_data_raw_pdu_t pending_conn_tx_pdu;
     uint8_t adv_address[6];
     uint8_t adv_txadd;
-    bool has_last_conn_tx_pdu;
     bool tx_unacked;
     bool has_pending_conn_tx_pdu;
-    bool conn_timer_initialized;
     uint32_t conn_next_event_tick_us;
 } ble_ctrl_runtime_t;
 
@@ -226,7 +199,6 @@ typedef struct
             ble_gatt_characteristic_t *p_characteristic;
             uint8_t data[BLE_GATT_MAX_VALUE_LEN];
             uint16_t len;
-            bool notifications_enabled;
         } gatt_characteristic;
     } params;
 } ble_deferred_evt_t;
@@ -245,21 +217,18 @@ extern const uint8_t m_data_channel_freq[37];
 extern const uint32_t m_ble_crc_poly;
 extern const uint32_t m_adv_crc_init;
 extern ble_host_t m_host;
-extern ble_controller_t m_controller;
 extern ble_link_t m_link;
 extern ble_evt_handler_t m_evt_handler;
 extern ble_ctrl_runtime_t m_ctrl_rt;
 
 uint16_t u16_decode(const uint8_t *p_src);
-uint8_t adv_pdu_type_get(const ble_ll_adv_pdu_t *p_pdu);
 void u16_encode(uint16_t value, uint8_t *p_dst);
 void ble_evt_dispatch_init(void);
 bool ble_evt_notify_gap(ble_evt_type_t evt_type);
 bool ble_evt_notify_gatt_characteristic(ble_gatt_evt_type_t evt_type,
                                         ble_gatt_characteristic_t *p_characteristic,
                                         const uint8_t *p_data,
-                                        uint16_t len,
-                                        bool notifications_enabled);
+                                        uint16_t len);
 bool ble_evt_notify_gatt_mtu_exchange(uint16_t requested_mtu,
                                       uint16_t response_mtu,
                                       uint16_t effective_mtu);
