@@ -145,7 +145,7 @@ typedef struct
     uint8_t channels[37];
     uint8_t access_address[4];
     uint32_t crc_init;
-    uint8_t rx_sn;
+    uint8_t next_expected_rx_sn;
     uint8_t tx_sn;
     bool supervision_started;
     bool rx_seen_this_interval;

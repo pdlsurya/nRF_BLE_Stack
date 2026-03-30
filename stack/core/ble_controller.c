@@ -128,7 +128,7 @@ static ble_ll_data_header_t controller_conn_header(uint8_t llid)
 {
     return (ble_ll_data_header_t){
         .llid = llid,
-        .nesn = (uint8_t)(m_link.rx_sn & 0x01U),
+        .nesn = (uint8_t)(m_link.next_expected_rx_sn & 0x01U),
         .sn = (uint8_t)(m_link.tx_sn & 0x01U),
         .md = 0U,
         .rfu = 0U,
@@ -298,7 +298,7 @@ bool controller_queue_att_payload(const uint8_t *p_att_payload, uint16_t att_len
         return false;
     }
 
-    if ((uint16_t)(att_len + BLE_L2CAP_HDR_LEN) > sizeof(m_ctrl_rt.conn_tx_pdu.payload))
+    if ((uint16_t)(att_len + BLE_L2CAP_HDR_LEN) > sizeof(m_ctrl_rt.pending_conn_tx_pdu.payload))
     {
         return false;
     }
@@ -311,12 +311,11 @@ bool controller_queue_att_payload(const uint8_t *p_att_payload, uint16_t att_len
         return false;
     }
 
-    m_ctrl_rt.conn_tx_pdu.header = controller_conn_header(BLE_LLID_START_L2CAP);
-    m_ctrl_rt.conn_tx_pdu.length = (uint8_t)(att_len + BLE_L2CAP_HDR_LEN);
-    u16_encode(att_len, &m_ctrl_rt.conn_tx_pdu.payload[0]);
-    u16_encode(BLE_L2CAP_CID_ATT, &m_ctrl_rt.conn_tx_pdu.payload[2]);
-    (void)memcpy(&m_ctrl_rt.conn_tx_pdu.payload[BLE_L2CAP_HDR_LEN], p_att_payload, att_len);
-    m_ctrl_rt.pending_conn_tx_pdu = m_ctrl_rt.conn_tx_pdu;
+    m_ctrl_rt.pending_conn_tx_pdu.header = controller_conn_header(BLE_LLID_START_L2CAP);
+    m_ctrl_rt.pending_conn_tx_pdu.length = (uint8_t)(att_len + BLE_L2CAP_HDR_LEN);
+    u16_encode(att_len, &m_ctrl_rt.pending_conn_tx_pdu.payload[0]);
+    u16_encode(BLE_L2CAP_CID_ATT, &m_ctrl_rt.pending_conn_tx_pdu.payload[2]);
+    (void)memcpy(&m_ctrl_rt.pending_conn_tx_pdu.payload[BLE_L2CAP_HDR_LEN], p_att_payload, att_len);
     m_ctrl_rt.has_pending_conn_tx_pdu = true;
     irq_unlock(primask);
 
@@ -474,33 +473,26 @@ static void controller_apply_connect_request(const ble_connect_req_pdu_t *p_req)
 static void radio_handle_connected_packet(void)
 {
     ble_ll_data_raw_pdu_t rx_pdu = m_ctrl_rt.conn_rx_pdu;
-    bool is_new_packet = (rx_pdu.header.sn == m_link.rx_sn);
-    uint8_t ctrl_rsp[12];
+    bool is_new_packet = (rx_pdu.header.sn == m_link.next_expected_rx_sn);
     uint16_t ctrl_rsp_len = 0U;
     uint16_t att_rsp_len = 0U;
     uint8_t att_rsp[BLE_ATT_GATT_MAX_MTU];
 
-    if (is_new_packet)
-    {
-        m_link.rx_sn ^= 1U;
-    }
-
     m_link.rx_seen_this_interval = true;
 
-    if (!is_new_packet)
-    {
-        controller_send_conn_response(false);
-        return;
-    }
-
     /*
-     * transmitSeqNum advances only after the peer acknowledges the last PDU.
-     * Per the spec, a received NESN different from transmitSeqNum means ACK.
+     * NESN acknowledges our last transmitted PDU independently of whether the
+     * received packet is new or a duplicate.
      */
     if (m_ctrl_rt.tx_unacked && (rx_pdu.header.nesn != m_link.tx_sn))
     {
         m_ctrl_rt.tx_unacked = false;
         m_link.tx_sn ^= 1U;
+    }
+
+    if (is_new_packet)
+    {
+        m_link.next_expected_rx_sn ^= 1U;
     }
 
     /*
@@ -532,6 +524,11 @@ static void radio_handle_connected_packet(void)
         m_link.supervision_started = true;
     }
 
+    if (!is_new_packet)
+    {
+        return;
+    }
+
     if (rx_pdu.header.llid == BLE_LLID_CONTROL_PDU)
     {
         if (rx_pdu.length == 0U)
@@ -539,20 +536,15 @@ static void radio_handle_connected_packet(void)
             return;
         }
 
-        ctrl_rsp_len = ll_control_process(rx_pdu.payload, rx_pdu.length, ctrl_rsp);
+        ctrl_rsp_len = ll_control_process(rx_pdu.payload,
+                                          rx_pdu.length,
+                                          m_ctrl_rt.pending_conn_tx_pdu.payload);
         if ((ctrl_rsp_len > 0U) && m_link.connected)
         {
-            m_ctrl_rt.conn_tx_pdu.header = controller_conn_header(BLE_LLID_CONTROL_PDU);
-            m_ctrl_rt.conn_tx_pdu.length = (uint8_t)ctrl_rsp_len;
-            (void)memcpy(m_ctrl_rt.conn_tx_pdu.payload, ctrl_rsp, ctrl_rsp_len);
-            m_ctrl_rt.pending_conn_tx_pdu = m_ctrl_rt.conn_tx_pdu;
+            m_ctrl_rt.pending_conn_tx_pdu.header = controller_conn_header(BLE_LLID_CONTROL_PDU);
+            m_ctrl_rt.pending_conn_tx_pdu.length = (uint8_t)ctrl_rsp_len;
             m_ctrl_rt.has_pending_conn_tx_pdu = true;
         }
-        return;
-    }
-
-    if (rx_pdu.length == 0U)
-    {
         return;
     }
 
