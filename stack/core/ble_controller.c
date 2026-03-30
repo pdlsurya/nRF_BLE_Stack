@@ -84,11 +84,13 @@ static void controller_apply_channel_map(const uint8_t *p_channel_map)
 {
     uint8_t i;
 
-    (void)memcpy(m_link.channel_map, p_channel_map, sizeof(m_link.channel_map));
+    m_link.channel_map_bits = 0U;
+    (void)memcpy(&m_link.channel_map_bits, p_channel_map, 5U);
+    m_link.channel_map_bits &= 0x1FFFFFFFFFULL;
     m_link.channel_count = 0U;
     for (i = 0U; i < 37U; i++)
     {
-        if ((m_link.channel_map[i >> 3] & (uint8_t)(1U << (i & 0x07U))) != 0U)
+        if ((m_link.channel_map_bits & (1ULL << i)) != 0ULL)
         {
             m_link.channels[m_link.channel_count++] = i;
         }
@@ -111,7 +113,7 @@ static void controller_hop_data_channel(void)
     unmapped = (uint8_t)((m_link.last_unmapped_channel + m_link.hop_increment) % 37U);
     m_link.last_unmapped_channel = unmapped;
 
-    if ((m_link.channel_map[unmapped >> 3] & (uint8_t)(1U << (unmapped & 0x07U))) != 0U)
+    if ((m_link.channel_map_bits & (1ULL << unmapped)) != 0ULL)
     {
         mapped = unmapped;
     }

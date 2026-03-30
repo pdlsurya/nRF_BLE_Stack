@@ -140,7 +140,7 @@ typedef struct
     uint16_t supervision_timeout_ms;
     uint8_t hop_increment;
     uint8_t channel_count;
-    uint8_t channel_map[5];
+    uint64_t channel_map_bits;
     uint8_t last_unmapped_channel;
     uint8_t channels[37];
     uint8_t access_address[4];
