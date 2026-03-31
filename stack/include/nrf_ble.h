@@ -44,21 +44,21 @@ typedef struct ble_gatt_characteristic_s ble_gatt_characteristic_t;
 
 typedef enum
 {
-    BLE_GATT_EVT_WRITE = 0,
-    BLE_GATT_EVT_NOTIFY_ENABLED,
-    BLE_GATT_EVT_NOTIFY_DISABLED
-} ble_gatt_evt_type_t;
+    BLE_GATT_CHAR_EVT_WRITE = 0,
+    BLE_GATT_CHAR_EVT_NOTIFY_ENABLED,
+    BLE_GATT_CHAR_EVT_NOTIFY_DISABLED
+} ble_gatt_char_evt_type_t;
 
 typedef struct
 {
-    ble_gatt_evt_type_t evt_type;
+    ble_gatt_char_evt_type_t evt_type;
     ble_gatt_characteristic_t *p_characteristic;
     const uint8_t *p_data;
     uint16_t len;
     bool notifications_enabled;
-} ble_gatt_evt_t;
+} ble_gatt_char_evt_t;
 
-typedef void (*ble_gatt_evt_handler_t)(const ble_gatt_evt_t *p_evt);
+typedef void (*ble_gatt_char_evt_handler_t)(const ble_gatt_char_evt_t *p_evt);
 
 struct ble_gatt_characteristic_s
 {
@@ -67,7 +67,7 @@ struct ble_gatt_characteristic_s
     uint8_t *p_value;
     uint16_t *p_value_len;
     uint16_t max_len;
-    ble_gatt_evt_handler_t evt_handler;
+    ble_gatt_char_evt_handler_t evt_handler;
     /* Filled by ble_gatt_server_init() and used for notifications/CCCD tracking. */
     uint16_t value_handle;
     uint16_t cccd_handle;

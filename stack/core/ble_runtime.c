@@ -98,7 +98,7 @@ bool ble_evt_notify_gap(ble_evt_type_t evt_type)
     return ble_evt_notify_stack(evt_type, 0U, 0U, 0U);
 }
 
-bool ble_evt_notify_gatt_characteristic(ble_gatt_evt_type_t evt_type,
+bool ble_evt_notify_gatt_characteristic(ble_gatt_char_evt_type_t evt_type,
                                         ble_gatt_characteristic_t *p_characteristic,
                                         const uint8_t *p_data,
                                         uint16_t len)
@@ -165,15 +165,15 @@ void SWI1_EGU1_IRQHandler(void)
             (evt.params.gatt_characteristic.p_characteristic != NULL) &&
             (evt.params.gatt_characteristic.p_characteristic->evt_handler != NULL))
         {
-            ble_gatt_evt_t gatt_evt = {
+            ble_gatt_char_evt_t gatt_evt = {
                 .evt_type = evt.params.gatt_characteristic.evt_type,
                 .p_characteristic = evt.params.gatt_characteristic.p_characteristic,
-                .p_data = (evt.params.gatt_characteristic.evt_type == BLE_GATT_EVT_WRITE) ?
+                .p_data = (evt.params.gatt_characteristic.evt_type == BLE_GATT_CHAR_EVT_WRITE) ?
                               evt.params.gatt_characteristic.data :
                               NULL,
                 .len = evt.params.gatt_characteristic.len,
                 .notifications_enabled =
-                    (evt.params.gatt_characteristic.evt_type == BLE_GATT_EVT_NOTIFY_ENABLED),
+                    (evt.params.gatt_characteristic.evt_type == BLE_GATT_CHAR_EVT_NOTIFY_ENABLED),
             };
 
             evt.params.gatt_characteristic.p_characteristic->evt_handler(&gatt_evt);

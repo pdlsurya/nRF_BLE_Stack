@@ -22,8 +22,8 @@ APP_TIMER_DEF(m_measurement_timer_id);
 #define BLE_CONNECTED_LED_IDX BSP_BOARD_LED_0
 #endif
 
-static void counter_char_evt_handler(const ble_gatt_evt_t *p_evt);
-static void text_char_evt_handler(const ble_gatt_evt_t *p_evt);
+static void counter_char_evt_handler(const ble_gatt_char_evt_t *p_evt);
+static void text_char_evt_handler(const ble_gatt_char_evt_t *p_evt);
 static void ble_evt_handler(const ble_evt_t *p_evt);
 static void ble_state_set(bool connected);
 static void start_advertising(void);
@@ -229,27 +229,27 @@ static void ble_evt_handler(const ble_evt_t *p_evt)
   }
 }
 
-static void counter_char_evt_handler(const ble_gatt_evt_t *p_evt)
+static void counter_char_evt_handler(const ble_gatt_char_evt_t *p_evt)
 {
   if (p_evt == NULL)
   {
     return;
   }
 
-  if ((p_evt->evt_type == BLE_GATT_EVT_NOTIFY_ENABLED) ||
-      (p_evt->evt_type == BLE_GATT_EVT_NOTIFY_DISABLED))
+  if ((p_evt->evt_type == BLE_GATT_CHAR_EVT_NOTIFY_ENABLED) ||
+      (p_evt->evt_type == BLE_GATT_CHAR_EVT_NOTIFY_DISABLED))
   {
     debug_log_print("BLE GATT: counter notifications %s\n",
                     p_evt->notifications_enabled ? "enabled" : "disabled");
   }
 }
 
-static void text_char_evt_handler(const ble_gatt_evt_t *p_evt)
+static void text_char_evt_handler(const ble_gatt_char_evt_t *p_evt)
 {
   char written_text[BLE_GATT_MAX_VALUE_LEN + 1U];
   uint16_t copy_len;
 
-  if ((p_evt == NULL) || (p_evt->evt_type != BLE_GATT_EVT_WRITE))
+  if ((p_evt == NULL) || (p_evt->evt_type != BLE_GATT_CHAR_EVT_WRITE))
   {
     return;
   }

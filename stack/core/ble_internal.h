@@ -195,7 +195,7 @@ typedef struct
         ble_evt_t stack_evt;
         struct
         {
-            ble_gatt_evt_type_t evt_type;
+            ble_gatt_char_evt_type_t evt_type;
             ble_gatt_characteristic_t *p_characteristic;
             uint8_t data[BLE_GATT_MAX_VALUE_LEN];
             uint16_t len;
@@ -225,7 +225,7 @@ uint16_t u16_decode(const uint8_t *p_src);
 void u16_encode(uint16_t value, uint8_t *p_dst);
 void ble_evt_dispatch_init(void);
 bool ble_evt_notify_gap(ble_evt_type_t evt_type);
-bool ble_evt_notify_gatt_characteristic(ble_gatt_evt_type_t evt_type,
+bool ble_evt_notify_gatt_characteristic(ble_gatt_char_evt_type_t evt_type,
                                         ble_gatt_characteristic_t *p_characteristic,
                                         const uint8_t *p_data,
                                         uint16_t len);

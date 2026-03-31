@@ -465,15 +465,15 @@ static uint16_t att_handle_write_req(uint16_t handle, const uint8_t *p_data, uin
     if (p_char_runtime != NULL)
     {
         (void)ble_evt_notify_gatt_characteristic((p_char_runtime->cccd_value[0] & 0x01U) != 0U
-                                                     ? BLE_GATT_EVT_NOTIFY_ENABLED
-                                                     : BLE_GATT_EVT_NOTIFY_DISABLED,
+                                                     ? BLE_GATT_CHAR_EVT_NOTIFY_ENABLED
+                                                     : BLE_GATT_CHAR_EVT_NOTIFY_DISABLED,
                                                  p_char_runtime->p_characteristic,
                                                  p_char_runtime->cccd_value,
                                                  len);
     }
     else if (p_attr->p_characteristic != NULL)
     {
-        (void)ble_evt_notify_gatt_characteristic(BLE_GATT_EVT_WRITE,
+        (void)ble_evt_notify_gatt_characteristic(BLE_GATT_CHAR_EVT_WRITE,
                                                  p_attr->p_characteristic,
                                                  p_attr->p_value,
                                                  len);
