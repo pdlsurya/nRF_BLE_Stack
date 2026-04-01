@@ -38,8 +38,6 @@ typedef struct
 {
     ble_gatt_char_evt_type_t evt_type;
     ble_gatt_characteristic_t *p_characteristic;
-    const uint8_t *p_data;
-    uint16_t len;
     bool notifications_enabled;
 } ble_gatt_char_evt_t;
 
@@ -50,7 +48,7 @@ struct ble_gatt_characteristic_s
     uint16_t uuid;
     uint8_t properties;
     uint8_t *p_value;
-    uint16_t *p_value_len;
+    uint16_t value_len;
     uint16_t max_len;
     ble_gatt_char_evt_handler_t evt_handler;
     /* Filled by ble_gatt_server_init() and used for notifications/CCCD tracking. */

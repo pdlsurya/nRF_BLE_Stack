@@ -32,16 +32,13 @@ static void timer_stop_if_started(app_timer_id_t timer_id);
 
 static const char m_dev_name[] = "nrf52-ble";
 static uint8_t m_counter_char_value; 
-static uint16_t m_counter_char_value_len = 1U;
 static char m_text_char_value[BLE_GATT_MAX_VALUE_LEN] = "";
-static uint16_t m_text_char_value_len = 0U;
 static const ble_adv_config_t m_adv_config = {
   .flags = (uint8_t)(BLE_GAP_ADV_FLAG_LE_GENERAL_DISC_MODE |
                      BLE_GAP_ADV_FLAG_BR_EDR_NOT_SUPPORTED),
   .tx_power = 0x08,
   .interval_ms = 100U,
   .included_service_uuid = CUSTOM_SERVICE_UUID,
-  .p_service_data = NULL,
 };
 
 static ble_gatt_characteristic_t m_custom_characteristics[] = {
@@ -49,7 +46,7 @@ static ble_gatt_characteristic_t m_custom_characteristics[] = {
         .uuid = CUSTOM_COUNTER_CHAR_UUID,
         .properties = (uint8_t)(BLE_GATT_CHAR_PROP_READ | BLE_GATT_CHAR_PROP_NOTIFY),
         .p_value = &m_counter_char_value,
-        .p_value_len = &m_counter_char_value_len,
+        .value_len = sizeof(m_counter_char_value),
         .max_len = sizeof(m_counter_char_value),
         .evt_handler = counter_char_evt_handler,
         .value_handle = 0U,
@@ -61,7 +58,7 @@ static ble_gatt_characteristic_t m_custom_characteristics[] = {
                                 BLE_GATT_CHAR_PROP_WRITE |
                                 BLE_GATT_CHAR_PROP_WRITE_NO_RESP),
         .p_value = (uint8_t *)m_text_char_value,
-        .p_value_len = &m_text_char_value_len,
+        .value_len = 0U,
         .max_len = sizeof(m_text_char_value),
         .evt_handler = text_char_evt_handler,
         .value_handle = 0U,
@@ -181,19 +178,20 @@ static void ble_evt_handler(const ble_evt_t *p_evt)
 
   case BLE_GATT_EVT_MTU_EXCHANGE:
     log_printf("BLE ATT: MTU exchange req=%u rsp=%u effective=%u\n",
-               (unsigned int)p_evt->requested_mtu,
-               (unsigned int)p_evt->response_mtu,
-               (unsigned int)p_evt->effective_mtu);
+               (unsigned int)p_evt->params.gatt.requested_mtu,
+               (unsigned int)p_evt->params.gatt.response_mtu,
+               (unsigned int)p_evt->params.gatt.effective_mtu);
     return;
 
   case BLE_GAP_EVT_CONNECTED:
     m_counter_char_value = 0U;
-    m_counter_char_value_len = 1U;
+    m_custom_characteristics[0].value_len = sizeof(m_counter_char_value);
     ble_state_set(true);
     err = app_timer_start(m_measurement_timer_id, timer_ticks_clamped(1000U), NULL);
     APP_ERROR_CHECK(err);
     log_printf("BLE GAP: connected, interval=%d ms timeout=%d ms\n",
-               (int)p_evt->conn_interval_ms, (int)p_evt->supervision_timeout_ms);
+               (int)p_evt->params.gap.conn_interval_ms,
+               (int)p_evt->params.gap.supervision_timeout_ms);
     return;
 
   case BLE_GAP_EVT_DISCONNECTED:
@@ -232,15 +230,15 @@ static void text_char_evt_handler(const ble_gatt_char_evt_t *p_evt)
     return;
   }
 
-  copy_len = p_evt->len;
+  copy_len = p_evt->p_characteristic->value_len;
   if (copy_len > BLE_GATT_MAX_VALUE_LEN)
   {
     copy_len = BLE_GATT_MAX_VALUE_LEN;
   }
 
-  if ((copy_len > 0U) && (p_evt->p_data != NULL))
+  if ((copy_len > 0U) && (p_evt->p_characteristic->p_value != NULL))
   {
-    (void)memcpy(written_text, p_evt->p_data, copy_len);
+    (void)memcpy(written_text, p_evt->p_characteristic->p_value, copy_len);
   }
   written_text[copy_len] = '\0';
 

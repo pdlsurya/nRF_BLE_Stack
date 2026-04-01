@@ -27,17 +27,10 @@
 
 typedef struct
 {
-    uint16_t uuid;
-    uint8_t data;
-} ble_service_data_t;
-
-typedef struct
-{
     uint8_t flags;
     int8_t tx_power;
     uint16_t interval_ms;
     uint16_t included_service_uuid;
-    const ble_service_data_t *p_service_data;
 } ble_adv_config_t;
 
 typedef enum
@@ -52,12 +45,25 @@ typedef enum
 
 typedef struct
 {
-    ble_evt_type_t evt_type;
     uint16_t conn_interval_ms;
     uint16_t supervision_timeout_ms;
+} ble_gap_evt_params_t;
+
+typedef struct
+{
     uint16_t requested_mtu;
     uint16_t response_mtu;
     uint16_t effective_mtu;
+} ble_gatt_evt_params_t;
+
+typedef struct
+{
+    ble_evt_type_t evt_type;
+    union
+    {
+        ble_gap_evt_params_t gap;
+        ble_gatt_evt_params_t gatt;
+    } params;
 } ble_evt_t;
 
 typedef void (*ble_evt_handler_t)(const ble_evt_t *p_evt);

@@ -68,10 +68,7 @@ void ble_evt_dispatch_init(void)
     NVIC_EnableIRQ(SWI1_EGU1_IRQn);
 }
 
-static bool ble_evt_notify_stack(ble_evt_type_t evt_type,
-                                 uint16_t requested_mtu,
-                                 uint16_t response_mtu,
-                                 uint16_t effective_mtu)
+static bool ble_evt_notify_stack(ble_evt_type_t evt_type, const ble_gatt_evt_params_t *p_gatt_params)
 {
     ble_deferred_evt_t evt;
 
@@ -84,24 +81,26 @@ static bool ble_evt_notify_stack(ble_evt_type_t evt_type,
     evt.kind = (evt_type == BLE_GATT_EVT_MTU_EXCHANGE) ? BLE_DEFERRED_EVT_KIND_GATT
                                                        : BLE_DEFERRED_EVT_KIND_GAP;
     evt.params.stack_evt.evt_type = evt_type;
-    evt.params.stack_evt.conn_interval_ms = m_link.conn_interval_ms;
-    evt.params.stack_evt.supervision_timeout_ms = m_link.supervision_timeout_ms;
-    evt.params.stack_evt.requested_mtu = requested_mtu;
-    evt.params.stack_evt.response_mtu = response_mtu;
-    evt.params.stack_evt.effective_mtu = effective_mtu;
+    if ((evt_type == BLE_GATT_EVT_MTU_EXCHANGE) && (p_gatt_params != NULL))
+    {
+        evt.params.stack_evt.params.gatt = *p_gatt_params;
+    }
+    else
+    {
+        evt.params.stack_evt.params.gap.conn_interval_ms = m_link.conn_interval_ms;
+        evt.params.stack_evt.params.gap.supervision_timeout_ms = m_link.supervision_timeout_ms;
+    }
 
     return ble_evt_post(&evt);
 }
 
 bool ble_evt_notify_gap(ble_evt_type_t evt_type)
 {
-    return ble_evt_notify_stack(evt_type, 0U, 0U, 0U);
+    return ble_evt_notify_stack(evt_type, NULL);
 }
 
 bool ble_evt_notify_gatt_characteristic(ble_gatt_char_evt_type_t evt_type,
-                                        ble_gatt_characteristic_t *p_characteristic,
-                                        const uint8_t *p_data,
-                                        uint16_t len)
+                                        ble_gatt_characteristic_t *p_characteristic)
 {
     ble_deferred_evt_t evt;
 
@@ -110,21 +109,10 @@ bool ble_evt_notify_gatt_characteristic(ble_gatt_char_evt_type_t evt_type,
         return false;
     }
 
-    if (len > BLE_GATT_MAX_VALUE_LEN)
-    {
-        len = BLE_GATT_MAX_VALUE_LEN;
-    }
-
     (void)memset(&evt, 0, sizeof(evt));
     evt.kind = BLE_DEFERRED_EVT_KIND_GATT_CHARACTERISTIC;
     evt.params.gatt_characteristic.evt_type = evt_type;
     evt.params.gatt_characteristic.p_characteristic = p_characteristic;
-
-    if ((p_data != NULL) && (len > 0U))
-    {
-        (void)memcpy(evt.params.gatt_characteristic.data, p_data, len);
-    }
-    evt.params.gatt_characteristic.len = len;
     return ble_evt_post(&evt);
 }
 
@@ -132,7 +120,13 @@ bool ble_evt_notify_gatt_mtu_exchange(uint16_t requested_mtu,
                                       uint16_t response_mtu,
                                       uint16_t effective_mtu)
 {
-    return ble_evt_notify_stack(BLE_GATT_EVT_MTU_EXCHANGE, requested_mtu, response_mtu, effective_mtu);
+    const ble_gatt_evt_params_t params = {
+        .requested_mtu = requested_mtu,
+        .response_mtu = response_mtu,
+        .effective_mtu = effective_mtu,
+    };
+
+    return ble_evt_notify_stack(BLE_GATT_EVT_MTU_EXCHANGE, &params);
 }
 
 void SWI1_EGU1_IRQHandler(void)
@@ -168,10 +162,6 @@ void SWI1_EGU1_IRQHandler(void)
             ble_gatt_char_evt_t gatt_evt = {
                 .evt_type = evt.params.gatt_characteristic.evt_type,
                 .p_characteristic = evt.params.gatt_characteristic.p_characteristic,
-                .p_data = (evt.params.gatt_characteristic.evt_type == BLE_GATT_CHAR_EVT_WRITE) ?
-                              evt.params.gatt_characteristic.data :
-                              NULL,
-                .len = evt.params.gatt_characteristic.len,
                 .notifications_enabled =
                     (evt.params.gatt_characteristic.evt_type == BLE_GATT_CHAR_EVT_NOTIFY_ENABLED),
             };

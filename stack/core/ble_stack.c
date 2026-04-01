@@ -72,8 +72,6 @@ void ble_adv_init(const ble_adv_config_t *p_config)
     m_host.adv_interval_ms = ((p_config != NULL) && (p_config->interval_ms != 0U)) ? p_config->interval_ms
                                                                                      : BLE_ADV_INTERVAL_MS_DEFAULT;
     m_host.included_service_uuid = (p_config != NULL) ? p_config->included_service_uuid : 0U;
-    m_host.service_data = ((p_config != NULL) && (p_config->p_service_data != NULL)) ? *p_config->p_service_data
-                                                                                       : (ble_service_data_t){0};
 }
 
 bool ble_notify_characteristic(const ble_gatt_characteristic_t *p_characteristic)

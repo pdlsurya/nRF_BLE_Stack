@@ -161,7 +161,6 @@ static bool host_add_ad_structure(uint8_t *p_adv_data_len,
 static void host_build_adv_pdu(void)
 {
     uint8_t adv_data_len = 0U;
-    uint8_t service_data_raw[3];
 
     (void)memset(&m_ctrl_rt.air_pdu, 0, sizeof(m_ctrl_rt.air_pdu));
 
@@ -191,13 +190,6 @@ static void host_build_adv_pdu(void)
                                     0x03U,
                                     (const uint8_t *)&m_host.included_service_uuid,
                                     sizeof(m_host.included_service_uuid));
-    }
-
-    if (m_host.service_data.uuid != 0U)
-    {
-        u16_encode(m_host.service_data.uuid, service_data_raw);
-        service_data_raw[2] = m_host.service_data.data;
-        (void)host_add_ad_structure(&adv_data_len, 0x16U, service_data_raw, sizeof(service_data_raw));
     }
 
     m_ctrl_rt.air_pdu.payload_length = (uint8_t)(BLE_ADV_PDU_OVERHEAD + adv_data_len);

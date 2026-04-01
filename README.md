@@ -78,6 +78,7 @@ See [nrf_ble.h](stack/include/nrf_ble.h) and
 
 - Stack-level BLE events are delivered through one callback registered with
   `ble_register_evt_handler()`.
+- `ble_evt_t` groups event payloads under `params.gap` and `params.gatt`.
 - Current stack-level events are:
   - `BLE_GAP_EVT_CONNECTED`
   - `BLE_GAP_EVT_DISCONNECTED`
@@ -87,6 +88,9 @@ See [nrf_ble.h](stack/include/nrf_ble.h) and
   - `BLE_GATT_EVT_MTU_EXCHANGE`
 - Characteristic-specific events are delivered through each characteristic's
   `evt_handler`.
+- `ble_gatt_char_evt_t` carries the event type plus `p_characteristic`. For
+  write events, applications read the current value from
+  `p_evt->p_characteristic->p_value` and `p_evt->p_characteristic->value_len`.
 - Both stack-level and characteristic-level callbacks are deferred to
   low-priority software interrupt context instead of being called directly from
   the radio ISR path, so application callbacks do not run from the radio ISR.
@@ -134,6 +138,7 @@ static void ble_evt_handler(const ble_evt_t *p_evt)
     switch (p_evt->evt_type)
     {
     case BLE_GAP_EVT_CONNECTED:
+        (void)p_evt->params.gap.conn_interval_ms;
         break;
     case BLE_GAP_EVT_DISCONNECTED:
         ble_start_advertising();
@@ -157,6 +162,18 @@ int main(void)
         __WFE();
     }
 }
+
+static void text_char_evt_handler(const ble_gatt_char_evt_t *p_evt)
+{
+    if ((p_evt != NULL) && (p_evt->evt_type == BLE_GATT_CHAR_EVT_WRITE))
+    {
+        uint16_t len = p_evt->p_characteristic->value_len;
+        const uint8_t *p_value = p_evt->p_characteristic->p_value;
+
+        (void)len;
+        (void)p_value;
+    }
+}
 ```
 
 ## Runtime Flow Summary
@@ -176,7 +193,9 @@ The normal peripheral flow is:
 
 - Services and characteristics are provided by the application instead of being hardcoded in the stack.
 - BLE stack events are delivered through a unified `ble_evt_t`.
-- GATT events remain per-characteristic callbacks.
+- GATT characteristic events remain per-characteristic callbacks.
+- Characteristic values and current lengths live directly in
+  `ble_gatt_characteristic_t`.
 - `ble_controller.c` owns BLE packet flow and timing.
 - `radio_driver.c` owns direct `NRF_RADIO` access.
 - The stack keeps ATT MTU fixed at 23 to avoid adding L2CAP fragmentation and reassembly logic.
