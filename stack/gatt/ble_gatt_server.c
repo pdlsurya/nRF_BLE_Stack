@@ -99,7 +99,6 @@ typedef struct
 } gatt_fixed_attr_values_t;
 
 static uint16_t m_att_mtu = BLE_ATT_MTU_DEFAULT;
-static uint8_t m_att_rsp[BLE_ATT_GATT_MAX_MTU];
 static gatt_attr_t m_gatt_db[BLE_ATT_GATT_MAX_ATTRS];
 static uint16_t m_gatt_db_count;
 static gatt_char_runtime_t m_char_runtime[BLE_GATT_MAX_CHARACTERISTICS];
@@ -116,22 +115,21 @@ static gatt_fixed_attr_values_t m_fixed_attr = {
 };
 static uint16_t m_gap_devname_value_len = 7U;
 
-static uint16_t att_error_rsp(uint8_t req_opcode, uint16_t handle, uint8_t error_code)
+static uint16_t att_error_rsp(uint8_t *p_rsp, uint16_t max_rsp_len, uint8_t req_opcode, uint16_t handle, uint8_t error_code)
 {
-    m_att_rsp[0] = BLE_ATT_OP_ERROR_RSP;
-    m_att_rsp[1] = req_opcode;
-    u16_encode(handle, &m_att_rsp[2]);
-    m_att_rsp[4] = error_code;
+    if ((p_rsp == NULL) || (max_rsp_len < 5U))
+    {
+        return 0U;
+    }
+
+    p_rsp[0] = BLE_ATT_OP_ERROR_RSP;
+    p_rsp[1] = req_opcode;
+    u16_encode(handle, &p_rsp[2]);
+    p_rsp[4] = error_code;
     return 5U;
 }
 
-static bool gatt_db_add_attr(uint16_t handle,
-                             uint16_t uuid,
-                             uint8_t permissions,
-                             uint8_t *p_value,
-                             uint16_t *p_len,
-                             uint16_t max_len,
-                             ble_gatt_characteristic_t *p_characteristic)
+static bool gatt_db_add_attr(uint16_t handle, uint16_t uuid, uint8_t permissions, uint8_t *p_value, uint16_t *p_len, uint16_t max_len, ble_gatt_characteristic_t *p_characteristic)
 {
     gatt_attr_t *p_attr;
 
@@ -207,13 +205,18 @@ static uint16_t att_service_end_handle(uint16_t service_handle)
     return end;
 }
 
-static uint16_t att_handle_find_info(uint16_t start_handle, uint16_t end_handle)
+static uint16_t att_handle_find_info(uint8_t *p_rsp, uint16_t max_rsp_len, uint16_t start_handle, uint16_t end_handle)
 {
     uint16_t out_len = 2U;
     uint16_t i;
 
-    m_att_rsp[0] = BLE_ATT_OP_FIND_INFO_RSP;
-    m_att_rsp[1] = 0x01U;
+    if ((p_rsp == NULL) || (max_rsp_len < 2U))
+    {
+        return 0U;
+    }
+
+    p_rsp[0] = BLE_ATT_OP_FIND_INFO_RSP;
+    p_rsp[1] = 0x01U;
 
     for (i = 0U; i < m_gatt_db_count; i++)
     {
@@ -221,39 +224,39 @@ static uint16_t att_handle_find_info(uint16_t start_handle, uint16_t end_handle)
         {
             continue;
         }
-        if ((out_len + 4U) > m_att_mtu)
+        if ((out_len + 4U) > max_rsp_len)
         {
             break;
         }
 
-        u16_encode(m_gatt_db[i].handle, &m_att_rsp[out_len]);
-        u16_encode(m_gatt_db[i].uuid, &m_att_rsp[out_len + 2U]);
+        u16_encode(m_gatt_db[i].handle, &p_rsp[out_len]);
+        u16_encode(m_gatt_db[i].uuid, &p_rsp[out_len + 2U]);
         out_len = (uint16_t)(out_len + 4U);
     }
 
     if (out_len == 2U)
     {
-        return att_error_rsp(BLE_ATT_OP_FIND_INFO_REQ, start_handle, BLE_ATT_ERR_ATTRIBUTE_NOT_FOUND);
+        return att_error_rsp(p_rsp, max_rsp_len, BLE_ATT_OP_FIND_INFO_REQ, start_handle, BLE_ATT_ERR_ATTRIBUTE_NOT_FOUND);
     }
 
     return out_len;
 }
 
-static uint16_t att_handle_find_by_type_value(uint16_t start_handle,
-                                              uint16_t end_handle,
-                                              uint16_t type_uuid,
-                                              const uint8_t *p_value,
-                                              uint16_t value_len)
+static uint16_t att_handle_find_by_type_value(uint16_t start_handle, uint16_t end_handle, uint16_t type_uuid, const uint8_t *p_value, uint16_t value_len, uint8_t *p_rsp, uint16_t max_rsp_len)
 {
     uint16_t out_len = 1U;
     uint16_t i;
 
     if ((type_uuid != BLE_UUID_PRIMARY_SERVICE) || (p_value == NULL) || (value_len != 2U))
     {
-        return att_error_rsp(BLE_ATT_OP_FIND_TYPE_REQ, start_handle, BLE_ATT_ERR_ATTRIBUTE_NOT_FOUND);
+        return att_error_rsp(p_rsp, max_rsp_len, BLE_ATT_OP_FIND_TYPE_REQ, start_handle, BLE_ATT_ERR_ATTRIBUTE_NOT_FOUND);
+    }
+    if ((p_rsp == NULL) || (max_rsp_len < 1U))
+    {
+        return 0U;
     }
 
-    m_att_rsp[0] = BLE_ATT_OP_FIND_TYPE_RSP;
+    p_rsp[0] = BLE_ATT_OP_FIND_TYPE_RSP;
 
     for (i = 0U; i < m_gatt_db_count; i++)
     {
@@ -267,36 +270,40 @@ static uint16_t att_handle_find_by_type_value(uint16_t start_handle,
         {
             continue;
         }
-        if ((out_len + 4U) > m_att_mtu)
+        if ((out_len + 4U) > max_rsp_len)
         {
             break;
         }
 
-        u16_encode(m_gatt_db[i].handle, &m_att_rsp[out_len]);
-        u16_encode(att_service_end_handle(m_gatt_db[i].handle), &m_att_rsp[out_len + 2U]);
+        u16_encode(m_gatt_db[i].handle, &p_rsp[out_len]);
+        u16_encode(att_service_end_handle(m_gatt_db[i].handle), &p_rsp[out_len + 2U]);
         out_len = (uint16_t)(out_len + 4U);
     }
 
     if (out_len == 1U)
     {
-        return att_error_rsp(BLE_ATT_OP_FIND_TYPE_REQ, start_handle, BLE_ATT_ERR_ATTRIBUTE_NOT_FOUND);
+        return att_error_rsp(p_rsp, max_rsp_len, BLE_ATT_OP_FIND_TYPE_REQ, start_handle, BLE_ATT_ERR_ATTRIBUTE_NOT_FOUND);
     }
 
     return out_len;
 }
 
-static uint16_t att_handle_read_by_group_type(uint16_t start_handle, uint16_t end_handle, uint16_t group_uuid)
+static uint16_t att_handle_read_by_group_type(uint8_t *p_rsp, uint16_t max_rsp_len, uint16_t start_handle, uint16_t end_handle, uint16_t group_uuid)
 {
     uint16_t out_len = 2U;
     uint16_t i;
 
     if (group_uuid != BLE_UUID_PRIMARY_SERVICE)
     {
-        return att_error_rsp(BLE_ATT_OP_READ_BY_GROUP_REQ, start_handle, BLE_ATT_ERR_UNSUPPORTED_GROUP_TYPE);
+        return att_error_rsp(p_rsp, max_rsp_len, BLE_ATT_OP_READ_BY_GROUP_REQ, start_handle, BLE_ATT_ERR_UNSUPPORTED_GROUP_TYPE);
+    }
+    if ((p_rsp == NULL) || (max_rsp_len < 2U))
+    {
+        return 0U;
     }
 
-    m_att_rsp[0] = BLE_ATT_OP_READ_BY_GROUP_RSP;
-    m_att_rsp[1] = 6U;
+    p_rsp[0] = BLE_ATT_OP_READ_BY_GROUP_RSP;
+    p_rsp[1] = 6U;
 
     for (i = 0U; i < m_gatt_db_count; i++)
     {
@@ -306,32 +313,37 @@ static uint16_t att_handle_read_by_group_type(uint16_t start_handle, uint16_t en
         {
             continue;
         }
-        if ((out_len + 6U) > m_att_mtu)
+        if ((out_len + 6U) > max_rsp_len)
         {
             break;
         }
 
-        u16_encode(m_gatt_db[i].handle, &m_att_rsp[out_len]);
-        u16_encode(att_service_end_handle(m_gatt_db[i].handle), &m_att_rsp[out_len + 2U]);
-        u16_encode(u16_decode(m_gatt_db[i].p_value), &m_att_rsp[out_len + 4U]);
+        u16_encode(m_gatt_db[i].handle, &p_rsp[out_len]);
+        u16_encode(att_service_end_handle(m_gatt_db[i].handle), &p_rsp[out_len + 2U]);
+        u16_encode(u16_decode(m_gatt_db[i].p_value), &p_rsp[out_len + 4U]);
         out_len = (uint16_t)(out_len + 6U);
     }
 
     if (out_len == 2U)
     {
-        return att_error_rsp(BLE_ATT_OP_READ_BY_GROUP_REQ, start_handle, BLE_ATT_ERR_ATTRIBUTE_NOT_FOUND);
+        return att_error_rsp(p_rsp, max_rsp_len, BLE_ATT_OP_READ_BY_GROUP_REQ, start_handle, BLE_ATT_ERR_ATTRIBUTE_NOT_FOUND);
     }
 
     return out_len;
 }
 
-static uint16_t att_handle_read_by_type(uint16_t start_handle, uint16_t end_handle, uint16_t type_uuid)
+static uint16_t att_handle_read_by_type(uint8_t *p_rsp, uint16_t max_rsp_len, uint16_t start_handle, uint16_t end_handle, uint16_t type_uuid)
 {
     uint16_t out_len = 2U;
     uint16_t entry_len = 0U;
     uint16_t i;
 
-    m_att_rsp[0] = BLE_ATT_OP_READ_BY_TYPE_RSP;
+    if ((p_rsp == NULL) || (max_rsp_len < 2U))
+    {
+        return 0U;
+    }
+
+    p_rsp[0] = BLE_ATT_OP_READ_BY_TYPE_RSP;
 
     for (i = 0U; i < m_gatt_db_count; i++)
     {
@@ -359,47 +371,47 @@ static uint16_t att_handle_read_by_type(uint16_t start_handle, uint16_t end_hand
         if (entry_len == 0U)
         {
             entry_len = (uint16_t)(2U + value_len);
-            if ((entry_len + 2U) > m_att_mtu)
+            if ((entry_len + 2U) > max_rsp_len)
             {
-                return att_error_rsp(BLE_ATT_OP_READ_BY_TYPE_REQ, start_handle, BLE_ATT_ERR_ATTRIBUTE_NOT_FOUND);
+                return att_error_rsp(p_rsp, max_rsp_len, BLE_ATT_OP_READ_BY_TYPE_REQ, start_handle, BLE_ATT_ERR_ATTRIBUTE_NOT_FOUND);
             }
-            m_att_rsp[1] = (uint8_t)entry_len;
+            p_rsp[1] = (uint8_t)entry_len;
         }
 
         if ((uint16_t)(2U + value_len) != entry_len)
         {
             continue;
         }
-        if ((out_len + entry_len) > m_att_mtu)
+        if ((out_len + entry_len) > max_rsp_len)
         {
             break;
         }
 
-        u16_encode(m_gatt_db[i].handle, &m_att_rsp[out_len]);
-        (void)memcpy(&m_att_rsp[out_len + 2U], m_gatt_db[i].p_value, value_len);
+        u16_encode(m_gatt_db[i].handle, &p_rsp[out_len]);
+        (void)memcpy(&p_rsp[out_len + 2U], m_gatt_db[i].p_value, value_len);
         out_len = (uint16_t)(out_len + entry_len);
     }
 
     if (out_len == 2U)
     {
-        return att_error_rsp(BLE_ATT_OP_READ_BY_TYPE_REQ, start_handle, BLE_ATT_ERR_ATTRIBUTE_NOT_FOUND);
+        return att_error_rsp(p_rsp, max_rsp_len, BLE_ATT_OP_READ_BY_TYPE_REQ, start_handle, BLE_ATT_ERR_ATTRIBUTE_NOT_FOUND);
     }
 
     return out_len;
 }
 
-static uint16_t att_handle_read(uint16_t handle)
+static uint16_t att_handle_read(uint8_t *p_rsp, uint16_t max_rsp_len, uint16_t handle)
 {
     gatt_attr_t *p_attr = att_find_attr(handle);
     uint16_t len;
 
     if (p_attr == NULL)
     {
-        return att_error_rsp(BLE_ATT_OP_READ_REQ, handle, BLE_ATT_ERR_INVALID_HANDLE);
+        return att_error_rsp(p_rsp, max_rsp_len, BLE_ATT_OP_READ_REQ, handle, BLE_ATT_ERR_INVALID_HANDLE);
     }
     if ((p_attr->permissions & BLE_ATT_PERM_READ) == 0U)
     {
-        return att_error_rsp(BLE_ATT_OP_READ_REQ, handle, BLE_ATT_ERR_READ_NOT_PERMITTED);
+        return att_error_rsp(p_rsp, max_rsp_len, BLE_ATT_OP_READ_REQ, handle, BLE_ATT_ERR_READ_NOT_PERMITTED);
     }
 
     len = *p_attr->p_len;
@@ -407,40 +419,40 @@ static uint16_t att_handle_read(uint16_t handle)
     {
         len = p_attr->max_len;
     }
-    if ((uint16_t)(1U + len) > m_att_mtu)
+    if ((uint16_t)(1U + len) > max_rsp_len)
     {
-        len = (uint16_t)(m_att_mtu - 1U);
+        len = (uint16_t)(max_rsp_len - 1U);
     }
 
-    m_att_rsp[0] = BLE_ATT_OP_READ_RSP;
-    (void)memcpy(&m_att_rsp[1], p_attr->p_value, len);
+    p_rsp[0] = BLE_ATT_OP_READ_RSP;
+    (void)memcpy(&p_rsp[1], p_attr->p_value, len);
     return (uint16_t)(1U + len);
 }
 
-static uint16_t att_handle_write_req(uint16_t handle, const uint8_t *p_data, uint16_t len, bool with_rsp)
+static uint16_t att_handle_write_req(uint8_t *p_rsp, uint16_t max_rsp_len, uint16_t handle, const uint8_t *p_data, uint16_t len, bool with_rsp)
 {
     gatt_attr_t *p_attr = att_find_attr(handle);
     gatt_char_runtime_t *p_char_runtime;
 
     if (p_attr == NULL)
     {
-        return with_rsp ? att_error_rsp(BLE_ATT_OP_WRITE_REQ, handle, BLE_ATT_ERR_INVALID_HANDLE) : 0U;
+        return with_rsp ? att_error_rsp(p_rsp, max_rsp_len, BLE_ATT_OP_WRITE_REQ, handle, BLE_ATT_ERR_INVALID_HANDLE) : 0U;
     }
     if ((p_attr->permissions & BLE_ATT_PERM_WRITE) == 0U)
     {
-        return with_rsp ? att_error_rsp(BLE_ATT_OP_WRITE_REQ, handle, BLE_ATT_ERR_WRITE_NOT_PERMITTED) : 0U;
+        return with_rsp ? att_error_rsp(p_rsp, max_rsp_len, BLE_ATT_OP_WRITE_REQ, handle, BLE_ATT_ERR_WRITE_NOT_PERMITTED) : 0U;
     }
 
     p_char_runtime = gatt_find_char_runtime(handle, true);
     if ((p_char_runtime != NULL) && (len != 2U))
     {
-        return with_rsp ? att_error_rsp(BLE_ATT_OP_WRITE_REQ, handle, BLE_ATT_ERR_INVALID_ATTRIBUTE_VALUE_LEN) : 0U;
+        return with_rsp ? att_error_rsp(p_rsp, max_rsp_len, BLE_ATT_OP_WRITE_REQ, handle, BLE_ATT_ERR_INVALID_ATTRIBUTE_VALUE_LEN) : 0U;
     }
     if ((p_char_runtime == NULL) && (p_attr->p_characteristic != NULL))
     {
         if (with_rsp && ((p_attr->p_characteristic->properties & BLE_GATT_CHAR_PROP_WRITE) == 0U))
         {
-            return att_error_rsp(BLE_ATT_OP_WRITE_REQ, handle, BLE_ATT_ERR_WRITE_NOT_PERMITTED);
+            return att_error_rsp(p_rsp, max_rsp_len, BLE_ATT_OP_WRITE_REQ, handle, BLE_ATT_ERR_WRITE_NOT_PERMITTED);
         }
         if (!with_rsp &&
             ((p_attr->p_characteristic->properties & BLE_GATT_CHAR_PROP_WRITE_NO_RESP) == 0U))
@@ -451,7 +463,9 @@ static uint16_t att_handle_write_req(uint16_t handle, const uint8_t *p_data, uin
 
     if (len > p_attr->max_len)
     {
-        return with_rsp ? att_error_rsp(BLE_ATT_OP_WRITE_REQ,
+        return with_rsp ? att_error_rsp(p_rsp,
+                                        max_rsp_len,
+                                        BLE_ATT_OP_WRITE_REQ,
                                         handle,
                                         BLE_ATT_ERR_INVALID_ATTRIBUTE_VALUE_LEN)
                         : 0U;
@@ -484,7 +498,12 @@ static uint16_t att_handle_write_req(uint16_t handle, const uint8_t *p_data, uin
         return 0U;
     }
 
-    m_att_rsp[0] = BLE_ATT_OP_WRITE_RSP;
+    if ((p_rsp == NULL) || (max_rsp_len < 1U))
+    {
+        return 0U;
+    }
+
+    p_rsp[0] = BLE_ATT_OP_WRITE_RSP;
     return 1U;
 }
 
@@ -679,8 +698,7 @@ static bool gatt_build_custom_attrs(ble_gatt_service_t *p_services, uint8_t serv
     return true;
 }
 
-bool ble_gatt_server_init(ble_gatt_service_t *p_services,
-                          uint8_t service_count)
+bool ble_gatt_server_init(ble_gatt_service_t *p_services, uint8_t service_count)
 {
     const char *p_name = (m_host.adv_name[0] != '\0') ? m_host.adv_name : "nrf-ble";
     size_t name_len;
@@ -766,12 +784,10 @@ uint16_t ble_gatt_server_build_notification(uint16_t value_handle, uint8_t *p_at
     return (uint16_t)(3U + value_len);
 }
 
-uint16_t ble_gatt_server_process_request(const uint8_t *p_att,
-                                         uint16_t att_len,
-                                         uint8_t *p_rsp,
-                                         uint16_t rsp_max_len)
+uint16_t ble_gatt_server_process_request(const uint8_t *p_att, uint16_t att_len, uint8_t *p_rsp, uint16_t rsp_max_len)
 {
     uint8_t opcode;
+    uint16_t max_rsp_len;
     uint16_t rsp_len = 0U;
 
     if ((p_rsp == NULL) || (rsp_max_len == 0U) || (p_att == NULL) || (att_len == 0U))
@@ -779,6 +795,7 @@ uint16_t ble_gatt_server_process_request(const uint8_t *p_att,
         return 0U;
     }
 
+    max_rsp_len = (rsp_max_len < m_att_mtu) ? rsp_max_len : m_att_mtu;
     opcode = p_att[0];
     switch (opcode)
     {
@@ -788,13 +805,17 @@ uint16_t ble_gatt_server_process_request(const uint8_t *p_att,
 
         if (att_len < 3U)
         {
-            rsp_len = att_error_rsp(opcode, 0x0000U, BLE_ATT_ERR_INVALID_PDU);
+            rsp_len = att_error_rsp(p_rsp, max_rsp_len, opcode, 0x0000U, BLE_ATT_ERR_INVALID_PDU);
             break;
         }
         requested_mtu = u16_decode(&p_att[1]);
         m_att_mtu = BLE_ATT_MTU_DEFAULT;
-        m_att_rsp[0] = BLE_ATT_OP_MTU_RSP;
-        u16_encode(BLE_ATT_MTU_DEFAULT, &m_att_rsp[1]);
+        if (max_rsp_len < 3U)
+        {
+            return 0U;
+        }
+        p_rsp[0] = BLE_ATT_OP_MTU_RSP;
+        u16_encode(BLE_ATT_MTU_DEFAULT, &p_rsp[1]);
         (void)ble_evt_notify_gatt_mtu_exchange(requested_mtu,
                                                BLE_ATT_MTU_DEFAULT,
                                                m_att_mtu);
@@ -805,32 +826,36 @@ uint16_t ble_gatt_server_process_request(const uint8_t *p_att,
     case BLE_ATT_OP_FIND_INFO_REQ:
         if (att_len < 5U)
         {
-            rsp_len = att_error_rsp(opcode, 0x0000U, BLE_ATT_ERR_INVALID_PDU);
+            rsp_len = att_error_rsp(p_rsp, max_rsp_len, opcode, 0x0000U, BLE_ATT_ERR_INVALID_PDU);
             break;
         }
-        rsp_len = att_handle_find_info(u16_decode(&p_att[1]), u16_decode(&p_att[3]));
+        rsp_len = att_handle_find_info(p_rsp, max_rsp_len, u16_decode(&p_att[1]), u16_decode(&p_att[3]));
         break;
 
     case BLE_ATT_OP_FIND_TYPE_REQ:
         if (att_len < 7U)
         {
-            rsp_len = att_error_rsp(opcode, 0x0000U, BLE_ATT_ERR_INVALID_PDU);
+            rsp_len = att_error_rsp(p_rsp, max_rsp_len, opcode, 0x0000U, BLE_ATT_ERR_INVALID_PDU);
             break;
         }
         rsp_len = att_handle_find_by_type_value(u16_decode(&p_att[1]),
                                                 u16_decode(&p_att[3]),
                                                 u16_decode(&p_att[5]),
                                                 &p_att[7],
-                                                (uint16_t)(att_len - 7U));
+                                                (uint16_t)(att_len - 7U),
+                                                p_rsp,
+                                                max_rsp_len);
         break;
 
     case BLE_ATT_OP_READ_BY_GROUP_REQ:
         if (att_len < 7U)
         {
-            rsp_len = att_error_rsp(opcode, 0x0000U, BLE_ATT_ERR_INVALID_PDU);
+            rsp_len = att_error_rsp(p_rsp, max_rsp_len, opcode, 0x0000U, BLE_ATT_ERR_INVALID_PDU);
             break;
         }
-        rsp_len = att_handle_read_by_group_type(u16_decode(&p_att[1]),
+        rsp_len = att_handle_read_by_group_type(p_rsp,
+                                                max_rsp_len,
+                                                u16_decode(&p_att[1]),
                                                 u16_decode(&p_att[3]),
                                                 u16_decode(&p_att[5]));
         break;
@@ -838,10 +863,12 @@ uint16_t ble_gatt_server_process_request(const uint8_t *p_att,
     case BLE_ATT_OP_READ_BY_TYPE_REQ:
         if (att_len < 7U)
         {
-            rsp_len = att_error_rsp(opcode, 0x0000U, BLE_ATT_ERR_INVALID_PDU);
+            rsp_len = att_error_rsp(p_rsp, max_rsp_len, opcode, 0x0000U, BLE_ATT_ERR_INVALID_PDU);
             break;
         }
-        rsp_len = att_handle_read_by_type(u16_decode(&p_att[1]),
+        rsp_len = att_handle_read_by_type(p_rsp,
+                                          max_rsp_len,
+                                          u16_decode(&p_att[1]),
                                           u16_decode(&p_att[3]),
                                           u16_decode(&p_att[5]));
         break;
@@ -849,19 +876,21 @@ uint16_t ble_gatt_server_process_request(const uint8_t *p_att,
     case BLE_ATT_OP_READ_REQ:
         if (att_len < 3U)
         {
-            rsp_len = att_error_rsp(opcode, 0x0000U, BLE_ATT_ERR_INVALID_PDU);
+            rsp_len = att_error_rsp(p_rsp, max_rsp_len, opcode, 0x0000U, BLE_ATT_ERR_INVALID_PDU);
             break;
         }
-        rsp_len = att_handle_read(u16_decode(&p_att[1]));
+        rsp_len = att_handle_read(p_rsp, max_rsp_len, u16_decode(&p_att[1]));
         break;
 
     case BLE_ATT_OP_WRITE_REQ:
         if (att_len < 3U)
         {
-            rsp_len = att_error_rsp(opcode, 0x0000U, BLE_ATT_ERR_INVALID_PDU);
+            rsp_len = att_error_rsp(p_rsp, max_rsp_len, opcode, 0x0000U, BLE_ATT_ERR_INVALID_PDU);
             break;
         }
-        rsp_len = att_handle_write_req(u16_decode(&p_att[1]),
+        rsp_len = att_handle_write_req(p_rsp,
+                                       max_rsp_len,
+                                       u16_decode(&p_att[1]),
                                        &p_att[3],
                                        (uint16_t)(att_len - 3U),
                                        true);
@@ -870,7 +899,9 @@ uint16_t ble_gatt_server_process_request(const uint8_t *p_att,
     case BLE_ATT_OP_WRITE_CMD:
         if (att_len >= 3U)
         {
-            (void)att_handle_write_req(u16_decode(&p_att[1]),
+            (void)att_handle_write_req(NULL,
+                                       0U,
+                                       u16_decode(&p_att[1]),
                                        &p_att[3],
                                        (uint16_t)(att_len - 3U),
                                        false);
@@ -878,17 +909,8 @@ uint16_t ble_gatt_server_process_request(const uint8_t *p_att,
         return 0U;
 
     default:
-        rsp_len = att_error_rsp(opcode, 0x0000U, BLE_ATT_ERR_REQUEST_NOT_SUPPORTED);
+        rsp_len = att_error_rsp(p_rsp, max_rsp_len, opcode, 0x0000U, BLE_ATT_ERR_REQUEST_NOT_SUPPORTED);
         break;
-    }
-
-    if (rsp_len > rsp_max_len)
-    {
-        rsp_len = rsp_max_len;
-    }
-    if (rsp_len > 0U)
-    {
-        (void)memcpy(p_rsp, m_att_rsp, rsp_len);
     }
 
     return rsp_len;

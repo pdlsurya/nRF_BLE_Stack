@@ -146,7 +146,7 @@ usbd_user_ev_handler(app_usbd_event_type_t event)
   }
 }
 
-void debug_log_init(void)
+void log_init(void)
 {
   print_next_indx = 0;
   load_next_indx = 0;
@@ -157,14 +157,23 @@ void debug_log_init(void)
   static const app_usbd_config_t usbd_config =
       {.ev_state_proc = usbd_user_ev_handler};
 
-  ret = nrf_drv_clock_init();
-  APP_ERROR_CHECK(ret);
-
-  nrf_drv_clock_lfclk_request(NULL);
-
-  while (!nrf_drv_clock_lfclk_is_running())
+  if (!nrf_drv_clock_init_check())
   {
-    /* Just waiting */
+    ret = nrf_drv_clock_init();
+    if ((ret != NRF_SUCCESS) && (ret != NRF_ERROR_MODULE_ALREADY_INITIALIZED))
+    {
+      APP_ERROR_CHECK(ret);
+    }
+  }
+
+  if (!nrf_drv_clock_lfclk_is_running())
+  {
+    nrf_drv_clock_lfclk_request(NULL);
+
+    while (!nrf_drv_clock_lfclk_is_running())
+    {
+      /* Just waiting */
+    }
   }
 
   app_usbd_serial_num_generate();
@@ -188,7 +197,7 @@ void debug_log_init(void)
     app_usbd_start();
   }
 }
-void debug_log_print(const char *format, ...)
+void log_printf(const char *format, ...)
 {
   char buffer[96];
   int written;
@@ -225,7 +234,7 @@ void debug_log_print(const char *format, ...)
     load_next_indx = 0;
 }
 
-void debug_log_process()
+void log_idle(void)
 {
   while (app_usbd_event_queue_process())
     ;

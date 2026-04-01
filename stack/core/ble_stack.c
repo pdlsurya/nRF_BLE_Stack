@@ -16,14 +16,6 @@
 #include "ble_gatt_server.h"
 #include "ble_internal.h"
 
-static const ble_adv_config_t m_adv_config_default = {
-    .flags = 0x06U,
-    .tx_power = 0,
-    .interval_ms = BLE_ADV_INTERVAL_MS_DEFAULT,
-    .included_service_uuid = 0U,
-    .p_service_data = NULL,
-};
-
 void ble_gap_set_device_name(const char *p_name)
 {
     size_t name_len;
@@ -58,8 +50,9 @@ void ble_register_evt_handler(ble_evt_handler_t handler)
 void ble_stack_init(void)
 {
     m_host = (ble_host_t){
-        .flags = m_adv_config_default.flags,
-        .adv_interval_ms = m_adv_config_default.interval_ms,
+        .flags = (uint8_t)(BLE_GAP_ADV_FLAG_LE_GENERAL_DISC_MODE |
+                           BLE_GAP_ADV_FLAG_BR_EDR_NOT_SUPPORTED),
+        .adv_interval_ms = BLE_ADV_INTERVAL_MS_DEFAULT,
     };
     m_link = (ble_link_t){0};
     m_ctrl_rt = (ble_ctrl_runtime_t){0};
@@ -72,16 +65,15 @@ void ble_stack_init(void)
 
 void ble_adv_init(const ble_adv_config_t *p_config)
 {
-    if (p_config == NULL)
-    {
-        p_config = &m_adv_config_default;
-    }
-
-    m_host.flags = p_config->flags;
-    m_host.tx_power = p_config->tx_power;
-    m_host.adv_interval_ms = (p_config->interval_ms != 0U) ? p_config->interval_ms : BLE_ADV_INTERVAL_MS_DEFAULT;
-    m_host.included_service_uuid = p_config->included_service_uuid;
-    m_host.service_data = (p_config->p_service_data != NULL) ? *p_config->p_service_data : (ble_service_data_t){0};
+    m_host.flags = (p_config != NULL) ? p_config->flags
+                                      : (uint8_t)(BLE_GAP_ADV_FLAG_LE_GENERAL_DISC_MODE |
+                                                  BLE_GAP_ADV_FLAG_BR_EDR_NOT_SUPPORTED);
+    m_host.tx_power = (p_config != NULL) ? p_config->tx_power : 0;
+    m_host.adv_interval_ms = ((p_config != NULL) && (p_config->interval_ms != 0U)) ? p_config->interval_ms
+                                                                                     : BLE_ADV_INTERVAL_MS_DEFAULT;
+    m_host.included_service_uuid = (p_config != NULL) ? p_config->included_service_uuid : 0U;
+    m_host.service_data = ((p_config != NULL) && (p_config->p_service_data != NULL)) ? *p_config->p_service_data
+                                                                                       : (ble_service_data_t){0};
 }
 
 bool ble_notify_characteristic(const ble_gatt_characteristic_t *p_characteristic)

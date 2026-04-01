@@ -26,4 +26,4 @@ make -C examples/custom_ble_stack_demo -j4
 ## Notes
 
 - The example uses the stack directly from the repository root through `BLE_STACK_DIR := ../..`.
-- The small `support/debug_log` module is included locally in this example so the build does not depend on machine-specific paths.
+- The small `support/usb_log` module is included locally in this example so the build does not depend on machine-specific paths.

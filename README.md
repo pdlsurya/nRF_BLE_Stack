@@ -26,6 +26,8 @@ packet flow is easy to follow in code.
 
 - `stack/include/nrf_ble.h`
   Public BLE stack API
+- `stack/gatt/ble_gatt_server.h`
+  Public GATT types for services, characteristics, and characteristic events
 - `stack/core/`
   Stack entry points, runtime state, controller flow, and deferred event delivery
 - `stack/gatt/`
@@ -52,7 +54,8 @@ Main application-facing entry points:
 - `ble_notify_characteristic()`
 - `ble_is_connected()`
 
-See [nrf_ble.h](stack/include/nrf_ble.h) for the full public interface.
+See [nrf_ble.h](stack/include/nrf_ble.h) and
+[ble_gatt_server.h](stack/gatt/ble_gatt_server.h) for the full public interface.
 
 ## Architecture At A Glance
 
@@ -106,10 +109,22 @@ make -C examples/custom_ble_stack_demo -j4
 ```
 
 Note: the bundled example is currently written for the nRF52840 dongle and uses
-the included `debug_log` backend over the dongle's built-in USB interface. Other
-nRF devices may not provide the same USB logging path, so their applications
-should replace that example logging backend with whatever output is available on
-the target, such as UART, RTT, or another board-specific logger.
+the included `support/usb_log.c` backend over the dongle's built-in USB
+interface. That helper exposes:
+
+- `log_init()`
+- `log_printf()`
+- `log_idle()`
+
+Other nRF devices may not provide the same USB logging path, so their
+applications should replace that example logging backend with whatever output is
+available on the target, such as UART, RTT, or another board-specific logger.
+For `BOARD_PCA10059`, the example uses `bsp_board_init(BSP_INIT_LEDS)` so the
+SDK handles the dongle `REGOUT0` LED-voltage setup, and it uses the SDK clock
+driver for LFCLK and HFCLK startup.
+Because the USB CDC logger needs its event queue serviced in thread context, the
+bundled example calls `log_idle()` in the main loop instead of sleeping with
+`__WFE()`.
 
 ## Typical Usage
 

@@ -4,10 +4,9 @@
 #include "app_error.h"
 #include "app_timer.h"
 #include "boards.h"
-#include "debug_log.h"
+#include "usb_log.h"
 #include "nrf_ble.h"
-#include "nrf_delay.h"
-#include "nrf_power.h"
+#include "nrf_drv_clock.h"
 
 APP_TIMER_DEF(m_measurement_timer_id);
 
@@ -27,6 +26,7 @@ static void text_char_evt_handler(const ble_gatt_char_evt_t *p_evt);
 static void ble_evt_handler(const ble_evt_t *p_evt);
 static void ble_state_set(bool connected);
 static void start_advertising(void);
+static void clock_init(void);
 static uint32_t timer_ticks_clamped(uint32_t ms);
 static void timer_stop_if_started(app_timer_id_t timer_id);
 
@@ -36,7 +36,8 @@ static uint16_t m_counter_char_value_len = 1U;
 static char m_text_char_value[BLE_GATT_MAX_VALUE_LEN] = "";
 static uint16_t m_text_char_value_len = 0U;
 static const ble_adv_config_t m_adv_config = {
-  .flags = 0x06,
+  .flags = (uint8_t)(BLE_GAP_ADV_FLAG_LE_GENERAL_DISC_MODE |
+                     BLE_GAP_ADV_FLAG_BR_EDR_NOT_SUPPORTED),
   .tx_power = 0x08,
   .interval_ms = 100U,
   .included_service_uuid = CUSTOM_SERVICE_UUID,
@@ -77,49 +78,26 @@ static ble_gatt_service_t m_custom_services[] = {
     },
 };
 
-static int nrf52840dongle_regout0_config(void)
+static void clock_init(void)
 {
-  if ((nrf_power_mainregstatus_get() == NRF_POWER_MAINREGSTATUS_HIGH) &&
-      ((NRF_UICR->REGOUT0 & UICR_REGOUT0_VOUT_Msk) ==
-       (UICR_REGOUT0_VOUT_DEFAULT << UICR_REGOUT0_VOUT_Pos)))
+  ret_code_t err;
+
+  if (!nrf_drv_clock_init_check())
   {
-    NRF_NVMC->CONFIG = NVMC_CONFIG_WEN_Wen << NVMC_CONFIG_WEN_Pos;
-    while (NRF_NVMC->READY == NVMC_READY_READY_Busy)
+    err = nrf_drv_clock_init();
+    if ((err != NRF_SUCCESS) && (err != NRF_ERROR_MODULE_ALREADY_INITIALIZED))
     {
+      APP_ERROR_CHECK(err);
     }
-
-    NRF_UICR->REGOUT0 =
-        (NRF_UICR->REGOUT0 & ~((uint32_t)UICR_REGOUT0_VOUT_Msk)) |
-        (UICR_REGOUT0_VOUT_3V3 << UICR_REGOUT0_VOUT_Pos);
-
-    NRF_NVMC->CONFIG = NVMC_CONFIG_WEN_Ren << NVMC_CONFIG_WEN_Pos;
-    while (NRF_NVMC->READY == NVMC_READY_READY_Busy)
-    {
-    }
-
-    NVIC_SystemReset();
   }
 
-  return 0;
-}
-
-static void lf_clock_start(void)
-{
-  NRF_CLOCK->LFCLKSRC = (CLOCK_LFCLKSRC_SRC_Xtal << CLOCK_LFCLKSRC_SRC_Pos);
-  NRF_CLOCK->EVENTS_LFCLKSTARTED = 0;
-  NRF_CLOCK->TASKS_LFCLKSTART = 1;
-
-  while (NRF_CLOCK->EVENTS_LFCLKSTARTED == 0)
+  nrf_drv_clock_lfclk_request(NULL);
+  while (!nrf_drv_clock_lfclk_is_running())
   {
   }
-}
 
-static void hf_clock_start(void)
-{
-  NRF_CLOCK->EVENTS_HFCLKSTARTED = 0;
-  NRF_CLOCK->TASKS_HFCLKSTART = 1;
-
-  while (NRF_CLOCK->EVENTS_HFCLKSTARTED == 0)
+  nrf_drv_clock_hfclk_request(NULL);
+  while (!nrf_drv_clock_hfclk_is_running())
   {
   }
 }
@@ -141,7 +119,7 @@ static void start_advertising(void)
 {
   ble_state_set(false);
   ble_start_advertising();
-  debug_log_print("BLE advertising started\n");
+  log_printf("BLE advertising started\n");
 }
 
 static uint32_t timer_ticks_clamped(uint32_t ms)
@@ -173,8 +151,8 @@ static void measurement_timer_handler(void *p_context)
   m_counter_char_value++;
   if (ble_notify_characteristic(&m_custom_characteristics[0]))
   {
-    debug_log_print("BLE GATT: notified counter=%u\n",
-                    (unsigned int)m_counter_char_value);
+    log_printf("BLE GATT: notified counter=%u\n",
+               (unsigned int)m_counter_char_value);
   }
 }
 
@@ -190,22 +168,22 @@ static void ble_evt_handler(const ble_evt_t *p_evt)
   switch (p_evt->evt_type)
   {
   case BLE_GAP_EVT_SUPERVISION_TIMEOUT:
-    debug_log_print("BLE LINK: supervision timeout\n");
+    log_printf("BLE LINK: supervision timeout\n");
     return;
 
   case BLE_GAP_EVT_CONN_UPDATE_IND:
-    debug_log_print("BLE LINK: connection update indicated (not yet applied)\n");
+    log_printf("BLE LINK: connection update indicated (not yet applied)\n");
     return;
 
   case BLE_GAP_EVT_TERMINATE_IND:
-    debug_log_print("BLE LINK: terminate indication received\n");
+    log_printf("BLE LINK: terminate indication received\n");
     return;
 
   case BLE_GATT_EVT_MTU_EXCHANGE:
-    debug_log_print("BLE ATT: MTU exchange req=%u rsp=%u effective=%u\n",
-                    (unsigned int)p_evt->requested_mtu,
-                    (unsigned int)p_evt->response_mtu,
-                    (unsigned int)p_evt->effective_mtu);
+    log_printf("BLE ATT: MTU exchange req=%u rsp=%u effective=%u\n",
+               (unsigned int)p_evt->requested_mtu,
+               (unsigned int)p_evt->response_mtu,
+               (unsigned int)p_evt->effective_mtu);
     return;
 
   case BLE_GAP_EVT_CONNECTED:
@@ -214,13 +192,13 @@ static void ble_evt_handler(const ble_evt_t *p_evt)
     ble_state_set(true);
     err = app_timer_start(m_measurement_timer_id, timer_ticks_clamped(1000U), NULL);
     APP_ERROR_CHECK(err);
-    debug_log_print("BLE GAP: connected, interval=%d ms timeout=%d ms\n",
-                    (int)p_evt->conn_interval_ms, (int)p_evt->supervision_timeout_ms);
+    log_printf("BLE GAP: connected, interval=%d ms timeout=%d ms\n",
+               (int)p_evt->conn_interval_ms, (int)p_evt->supervision_timeout_ms);
     return;
 
   case BLE_GAP_EVT_DISCONNECTED:
     timer_stop_if_started(m_measurement_timer_id);
-    debug_log_print("BLE GAP: disconnected\n");
+    log_printf("BLE GAP: disconnected\n");
     start_advertising();
     return;
 
@@ -239,8 +217,8 @@ static void counter_char_evt_handler(const ble_gatt_char_evt_t *p_evt)
   if ((p_evt->evt_type == BLE_GATT_CHAR_EVT_NOTIFY_ENABLED) ||
       (p_evt->evt_type == BLE_GATT_CHAR_EVT_NOTIFY_DISABLED))
   {
-    debug_log_print("BLE GATT: counter notifications %s\n",
-                    p_evt->notifications_enabled ? "enabled" : "disabled");
+    log_printf("BLE GATT: counter notifications %s\n",
+               p_evt->notifications_enabled ? "enabled" : "disabled");
   }
 }
 
@@ -266,17 +244,15 @@ static void text_char_evt_handler(const ble_gatt_char_evt_t *p_evt)
   }
   written_text[copy_len] = '\0';
 
-  debug_log_print("BLE GATT: write text=\"%s\"\n", written_text);
+  log_printf("BLE GATT: write text=\"%s\"\n", written_text);
 }
 
 int main(void)
 {
   ret_code_t err;
-  nrf52840dongle_regout0_config();
-  hf_clock_start();
-  lf_clock_start();
-  debug_log_init();
   bsp_board_init(BSP_INIT_LEDS);
+  clock_init();
+  log_init();
 
   ble_stack_init();
   ble_register_evt_handler(ble_evt_handler);
@@ -294,6 +270,6 @@ int main(void)
 
   while (1)
   {
-    debug_log_process();
+    log_idle();
   }
 }

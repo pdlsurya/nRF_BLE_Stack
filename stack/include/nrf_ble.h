@@ -15,13 +15,13 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define BLE_GATT_MAX_VALUE_LEN 20U
-#define BLE_GATT_MAX_SERVICES 4U
-#define BLE_GATT_MAX_CHARACTERISTICS 8U
-#define BLE_GATT_CHAR_PROP_READ 0x02U
-#define BLE_GATT_CHAR_PROP_WRITE_NO_RESP 0x04U
-#define BLE_GATT_CHAR_PROP_WRITE 0x08U
-#define BLE_GATT_CHAR_PROP_NOTIFY 0x10U
+#include "ble_gatt_server.h"
+
+#define BLE_GAP_ADV_FLAG_LE_LIMITED_DISC_MODE  0x01U
+#define BLE_GAP_ADV_FLAG_LE_GENERAL_DISC_MODE  0x02U
+#define BLE_GAP_ADV_FLAG_BR_EDR_NOT_SUPPORTED  0x04U
+#define BLE_GAP_ADV_FLAG_LE_BR_EDR_CONTROLLER  0x08U
+#define BLE_GAP_ADV_FLAG_LE_BR_EDR_HOST        0x10U
 
 #define BLE_ADV_INTERVAL_MS_DEFAULT 100U
 
@@ -39,47 +39,6 @@ typedef struct
     uint16_t included_service_uuid;
     const ble_service_data_t *p_service_data;
 } ble_adv_config_t;
-
-typedef struct ble_gatt_characteristic_s ble_gatt_characteristic_t;
-
-typedef enum
-{
-    BLE_GATT_CHAR_EVT_WRITE = 0,
-    BLE_GATT_CHAR_EVT_NOTIFY_ENABLED,
-    BLE_GATT_CHAR_EVT_NOTIFY_DISABLED
-} ble_gatt_char_evt_type_t;
-
-typedef struct
-{
-    ble_gatt_char_evt_type_t evt_type;
-    ble_gatt_characteristic_t *p_characteristic;
-    const uint8_t *p_data;
-    uint16_t len;
-    bool notifications_enabled;
-} ble_gatt_char_evt_t;
-
-typedef void (*ble_gatt_char_evt_handler_t)(const ble_gatt_char_evt_t *p_evt);
-
-struct ble_gatt_characteristic_s
-{
-    uint16_t uuid;
-    uint8_t properties;
-    uint8_t *p_value;
-    uint16_t *p_value_len;
-    uint16_t max_len;
-    ble_gatt_char_evt_handler_t evt_handler;
-    /* Filled by ble_gatt_server_init() and used for notifications/CCCD tracking. */
-    uint16_t value_handle;
-    uint16_t cccd_handle;
-};
-
-typedef struct
-{
-    uint16_t uuid;
-    ble_gatt_characteristic_t *p_characteristics;
-    uint8_t characteristic_count;
-    uint16_t service_handle;
-} ble_gatt_service_t;
 
 typedef enum
 {

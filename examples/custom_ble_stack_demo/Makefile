@@ -3,7 +3,7 @@ TARGETS          := nrf52840_xxaa
 OUTPUT_DIRECTORY := _build
 BLE_STACK_DIR := ../..
 SDK_ROOT := ../../external/nrf5-sdk
-DEBUG_LOG_DIR := support
+USB_LOG_DIR := support
 
 ifneq ($(shell command -v arm-none-eabi-gcc 2>/dev/null),)
 GNU_INSTALL_ROOT ?= $(dir $(shell command -v arm-none-eabi-gcc))
@@ -62,7 +62,7 @@ SRC_FILES += \
   $(SDK_ROOT)/modules/nrfx/drivers/src/nrfx_uarte.c \
   main.c \
   $(SDK_ROOT)/modules/nrfx/mdk/system_nrf52840.c \
-  $(DEBUG_LOG_DIR)/debug_log.c\
+  $(USB_LOG_DIR)/usb_log.c\
   $(BLE_STACK_DIR)/stack/radio/radio_driver.c\
   $(BLE_STACK_DIR)/stack/core/ble_runtime.c\
   $(BLE_STACK_DIR)/stack/core/ble_controller.c\
@@ -120,7 +120,7 @@ INC_FOLDERS += \
   $(SDK_ROOT)/external/fprintf \
   $(SDK_ROOT)/components/libraries/log/src \
   $(SDK_ROOT)/external/utf_converter \
-  $(DEBUG_LOG_DIR)
+  $(USB_LOG_DIR)
   
 # Libraries common to all targets
 LIB_FILES += \
