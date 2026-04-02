@@ -24,14 +24,32 @@
 #define BLE_GAP_ADV_FLAG_LE_BR_EDR_HOST        0x10U
 
 #define BLE_ADV_INTERVAL_MS_DEFAULT 100U
+#define MS_TO_1P25MS_UNITS(ms) \
+    ((uint16_t)((((uint32_t)(ms)) * 1000U) / 1250U))
+#define MS_TO_10MS_UNITS(ms) \
+    ((uint16_t)(((uint32_t)(ms)) / 10U))
+#define UNITS_1P25MS_TO_US(units) \
+    ((uint32_t)(units) * 1250U)
+#define UNITS_1P25MS_TO_MS(units) \
+    ((uint16_t)(((uint32_t)(units) * 125U) / 100U))
+#define UNITS_10MS_TO_MS(units) \
+    ((uint16_t)((uint32_t)(units) * 10U))
 
 typedef struct
 {
     uint8_t flags;
     int8_t tx_power;
     uint16_t interval_ms;
-    uint16_t included_service_uuid;
+    const ble_uuid_t *p_included_service_uuid;
 } ble_adv_config_t;
+
+typedef struct
+{
+    uint16_t min_conn_interval_1p25ms;
+    uint16_t max_conn_interval_1p25ms;
+    uint16_t slave_latency;
+    uint16_t supervision_timeout_10ms;
+} ble_gap_conn_params_t;
 
 typedef enum
 {
@@ -46,6 +64,7 @@ typedef enum
 typedef struct
 {
     uint16_t conn_interval_ms;
+    uint16_t slave_latency;
     uint16_t supervision_timeout_ms;
 } ble_gap_evt_params_t;
 
@@ -73,6 +92,9 @@ void ble_stack_init(void);
 void ble_register_evt_handler(ble_evt_handler_t handler);
 void ble_adv_init(const ble_adv_config_t *p_config);
 void ble_gap_set_device_name(const char *p_name);
+void ble_gap_set_conn_params(const ble_gap_conn_params_t *p_params);
+bool ble_gap_update_conn_params(void);
+void ble_uuid_set_vendor_base(const uint8_t uuid128[BLE_UUID128_LEN]);
 bool ble_gatt_server_init(ble_gatt_service_t *p_services,
                           uint8_t service_count);
 bool ble_is_connected(void);

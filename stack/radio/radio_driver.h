@@ -41,6 +41,12 @@ typedef enum
 
 typedef enum
 {
+	RADIO_PREAMBLE_8BIT,
+	RADIO_PREAMBLE_16BIT
+} radio_preamble_length_t;
+
+typedef enum
+{
 	DISABLED,
 	RX_RU,
 	RX_IDLE,
@@ -137,6 +143,12 @@ static inline void radio_set_s0_field_size(uint8_t bytes)
 static inline void radio_set_s1_field_size(uint8_t bits)
 {
 	NRF_RADIO->PCNF0 |= (uint32_t)bits << 16;
+}
+
+static inline void radio_set_preamble_length(radio_preamble_length_t preamble_length)
+{
+	NRF_RADIO->PCNF0 &= ~((uint32_t)0x3U << 24);
+	NRF_RADIO->PCNF0 |= (uint32_t)preamble_length << 24;
 }
 
 static inline void radio_set_static_payload_size(uint32_t static_pl_size)

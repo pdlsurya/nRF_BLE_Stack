@@ -68,7 +68,9 @@ void ble_evt_dispatch_init(void)
     NVIC_EnableIRQ(SWI1_EGU1_IRQn);
 }
 
-static bool ble_evt_notify_stack(ble_evt_type_t evt_type, const ble_gatt_evt_params_t *p_gatt_params)
+static bool ble_evt_notify_stack(ble_evt_type_t evt_type,
+                                 const ble_gap_evt_params_t *p_gap_params,
+                                 const ble_gatt_evt_params_t *p_gatt_params)
 {
     ble_deferred_evt_t evt;
 
@@ -85,10 +87,15 @@ static bool ble_evt_notify_stack(ble_evt_type_t evt_type, const ble_gatt_evt_par
     {
         evt.params.stack_evt.params.gatt = *p_gatt_params;
     }
+    else if (p_gap_params != NULL)
+    {
+        evt.params.stack_evt.params.gap = *p_gap_params;
+    }
     else
     {
-        evt.params.stack_evt.params.gap.conn_interval_ms = m_link.conn_interval_ms;
-        evt.params.stack_evt.params.gap.supervision_timeout_ms = m_link.supervision_timeout_ms;
+        evt.params.stack_evt.params.gap.conn_interval_ms = m_link.conn.conn_interval_ms;
+        evt.params.stack_evt.params.gap.slave_latency = m_link.conn.slave_latency;
+        evt.params.stack_evt.params.gap.supervision_timeout_ms = m_link.conn.supervision_timeout_ms;
     }
 
     return ble_evt_post(&evt);
@@ -96,7 +103,7 @@ static bool ble_evt_notify_stack(ble_evt_type_t evt_type, const ble_gatt_evt_par
 
 bool ble_evt_notify_gap(ble_evt_type_t evt_type)
 {
-    return ble_evt_notify_stack(evt_type, NULL);
+    return ble_evt_notify_stack(evt_type, NULL, NULL);
 }
 
 bool ble_evt_notify_gatt_characteristic(ble_gatt_char_evt_type_t evt_type,
@@ -126,7 +133,7 @@ bool ble_evt_notify_gatt_mtu_exchange(uint16_t requested_mtu,
         .effective_mtu = effective_mtu,
     };
 
-    return ble_evt_notify_stack(BLE_GATT_EVT_MTU_EXCHANGE, &params);
+    return ble_evt_notify_stack(BLE_GATT_EVT_MTU_EXCHANGE, NULL, &params);
 }
 
 void SWI1_EGU1_IRQHandler(void)
@@ -146,6 +153,17 @@ void SWI1_EGU1_IRQHandler(void)
         evt = m_evt_dispatch.q[m_evt_dispatch.ridx];
         m_evt_dispatch.ridx = (uint8_t)((m_evt_dispatch.ridx + 1U) % BLE_EVT_QUEUE_SIZE);
         irq_unlock(primask);
+
+        if ((evt.kind == BLE_DEFERRED_EVT_KIND_GAP) &&
+            (evt.params.stack_evt.evt_type == BLE_GAP_EVT_CONNECTED))
+        {
+            ble_conn_param_update_timer_start();
+        }
+        else if ((evt.kind == BLE_DEFERRED_EVT_KIND_GAP) &&
+                 (evt.params.stack_evt.evt_type == BLE_GAP_EVT_DISCONNECTED))
+        {
+            ble_conn_param_update_timer_stop();
+        }
 
         if (((evt.kind == BLE_DEFERRED_EVT_KIND_GAP) ||
              (evt.kind == BLE_DEFERRED_EVT_KIND_GATT)) &&

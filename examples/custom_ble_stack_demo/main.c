@@ -10,10 +10,6 @@
 
 APP_TIMER_DEF(m_measurement_timer_id);
 
-#define CUSTOM_SERVICE_UUID      0xFFF0
-#define CUSTOM_COUNTER_CHAR_UUID 0xFFF1
-#define CUSTOM_TEXT_CHAR_UUID    0xFFF2
-
 #define BLE_ADV_LED_IDX       BSP_BOARD_LED_0
 #if (LEDS_NUMBER > 1)
 #define BLE_CONNECTED_LED_IDX BSP_BOARD_LED_3
@@ -30,20 +26,31 @@ static void clock_init(void);
 static uint32_t timer_ticks_clamped(uint32_t ms);
 static void timer_stop_if_started(app_timer_id_t timer_id);
 
-static const char m_dev_name[] = "nrf52-ble";
+static const char m_dev_name[] = "nrf-ble";
 static uint8_t m_counter_char_value; 
 static char m_text_char_value[BLE_GATT_MAX_VALUE_LEN] = "";
+static const uint8_t m_custom_uuid_base[BLE_UUID128_LEN] = {
+    0x52U, 0xD0U, 0x4FU, 0x36U, 0x7EU, 0x85U, 0x74U, 0x1CU,
+    0xA6U, 0x8FU, 0x4EU, 0x7AU, 0x00U, 0x00U, 0x00U, 0x00U,
+};
+static const ble_uuid_t m_custom_service_uuid = BLE_UUID_VENDOR16_INIT(0xFFF0U);
+static const ble_gap_conn_params_t m_gap_conn_params = {
+    .min_conn_interval_1p25ms = MS_TO_1P25MS_UNITS(30U),
+    .max_conn_interval_1p25ms = MS_TO_1P25MS_UNITS(30U),
+    .slave_latency = 0U,
+    .supervision_timeout_10ms = MS_TO_10MS_UNITS(720U),
+};
 static const ble_adv_config_t m_adv_config = {
   .flags = (uint8_t)(BLE_GAP_ADV_FLAG_LE_GENERAL_DISC_MODE |
                      BLE_GAP_ADV_FLAG_BR_EDR_NOT_SUPPORTED),
   .tx_power = 0x08,
   .interval_ms = 100U,
-  .included_service_uuid = CUSTOM_SERVICE_UUID,
+  .p_included_service_uuid = &m_custom_service_uuid,
 };
 
 static ble_gatt_characteristic_t m_custom_characteristics[] = {
     {
-        .uuid = CUSTOM_COUNTER_CHAR_UUID,
+        .uuid = BLE_UUID_VENDOR16_INIT(0xFFF1U),
         .properties = (uint8_t)(BLE_GATT_CHAR_PROP_READ | BLE_GATT_CHAR_PROP_NOTIFY),
         .p_value = &m_counter_char_value,
         .value_len = sizeof(m_counter_char_value),
@@ -53,7 +60,7 @@ static ble_gatt_characteristic_t m_custom_characteristics[] = {
         .cccd_handle = 0U,
     },
     {
-        .uuid = CUSTOM_TEXT_CHAR_UUID,
+        .uuid = BLE_UUID_VENDOR16_INIT(0xFFF2U),
         .properties = (uint8_t)(BLE_GATT_CHAR_PROP_READ |
                                 BLE_GATT_CHAR_PROP_WRITE |
                                 BLE_GATT_CHAR_PROP_WRITE_NO_RESP),
@@ -68,7 +75,7 @@ static ble_gatt_characteristic_t m_custom_characteristics[] = {
 
 static ble_gatt_service_t m_custom_services[] = {
     {
-        .uuid = CUSTOM_SERVICE_UUID,
+        .uuid = BLE_UUID_VENDOR16_INIT(0xFFF0U),
         .p_characteristics = m_custom_characteristics,
         .characteristic_count = (uint8_t)(sizeof(m_custom_characteristics) / sizeof(m_custom_characteristics[0])),
         .service_handle = 0U,
@@ -169,7 +176,10 @@ static void ble_evt_handler(const ble_evt_t *p_evt)
     return;
 
   case BLE_GAP_EVT_CONN_UPDATE_IND:
-    log_printf("BLE LINK: connection update indicated (not yet applied)\n");
+    log_printf("BLE GAP: connection updated, interval=%d ms latency=%d timeout=%d ms\n",
+               (int)p_evt->params.gap.conn_interval_ms,
+               (int)p_evt->params.gap.slave_latency,
+               (int)p_evt->params.gap.supervision_timeout_ms);
     return;
 
   case BLE_GAP_EVT_TERMINATE_IND:
@@ -255,6 +265,8 @@ int main(void)
   ble_stack_init();
   ble_register_evt_handler(ble_evt_handler);
   ble_gap_set_device_name(m_dev_name);
+  ble_gap_set_conn_params(&m_gap_conn_params);
+  ble_uuid_set_vendor_base(m_custom_uuid_base);
   ble_adv_init(&m_adv_config);
   APP_ERROR_CHECK_BOOL(ble_gatt_server_init(m_custom_services,
                                             (uint8_t)(sizeof(m_custom_services) / sizeof(m_custom_services[0]))));

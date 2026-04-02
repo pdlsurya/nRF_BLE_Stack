@@ -22,15 +22,26 @@
 #define BLE_MAX_ADV_DATA_LEN 31U
 #define BLE_ADV_PDU_OVERHEAD 6U
 #define BLE_ADV_NAME_MAX_LEN 20U
-#define BLE_IDENTITY_SALT 0x434D535456324C31ULL
+#define BLE_IDENTITY_SALT 0x434D535456324C33ULL
 #define BLE_L2CAP_CID_ATT 0x0004U
+#define BLE_L2CAP_CID_SIGNALING 0x0005U
 #define BLE_L2CAP_HDR_LEN 4U
+#define BLE_L2CAP_SIG_HDR_LEN 4U
+#define BLE_L2CAP_SIG_CONN_PARAM_UPDATE_REQ 0x12U
+#define BLE_L2CAP_SIG_CONN_PARAM_UPDATE_RSP 0x13U
+#define BLE_L2CAP_SIG_CONN_PARAM_ACCEPTED 0x0000U
+#define BLE_L2CAP_SIG_CONN_PARAM_REJECTED 0x0001U
 #define BLE_ADV_RX_WINDOW_US 1500U
 #define BLE_CONN_EVENT_GUARD_US 500U
 #define BLE_CONN_TIMER_PRESCALER 4U
 #define BLE_CONN_TIMER_IRQ_PRIORITY 0U
 #define BLE_EVT_IRQ_PRIORITY 6U
 #define BLE_EVT_QUEUE_SIZE 16U
+#define BLE_CONN_PARAM_UPDATE_DELAY_MS 6000U
+#define BLE_LL_DATA_LEN_DEFAULT_OCTETS 27U
+#define BLE_LL_DATA_LEN_MAX_OCTETS 251U
+#define BLE_LL_DATA_LEN_DEFAULT_TIME 328U
+#define BLE_LL_DATA_LEN_MAX_TIME 2120U
 
 #define BLE_LL_CTRL_CONN_UPDATE_IND 0x00U
 #define BLE_LL_CTRL_CHANNEL_MAP_IND 0x01U
@@ -44,9 +55,12 @@
 #define BLE_LL_CTRL_LENGTH_RSP 0x15U
 #define BLE_LL_CTRL_PHY_REQ 0x16U
 #define BLE_LL_CTRL_PHY_RSP 0x17U
+#define BLE_LL_CTRL_PHY_UPDATE_IND 0x18U
 #define BLE_LL_VERSION_4_2 0x08U
 #define BLE_LL_COMPANY_ID_NORDIC 0x0059U
 #define BLE_LL_SUBVERSION 0x0000U
+#define BLE_LL_FEATURE_DATA_LENGTH_EXTENSION 0x20U
+#define BLE_LL_PHY_1M 0x01U
 
 static inline uint32_t irq_lock(void)
 {
@@ -134,26 +148,63 @@ typedef struct
 
 typedef struct
 {
-    bool connected;
     uint16_t conn_interval_ms;
     uint32_t conn_interval_us;
+    uint16_t slave_latency;
     uint16_t supervision_timeout_ms;
+} ble_link_conn_state_t;
+
+typedef struct
+{
     uint8_t hop_increment;
     uint8_t channel_count;
     uint64_t channel_map_bits;
     uint8_t last_unmapped_channel;
     uint8_t channels[37];
+} ble_link_channel_state_t;
+
+typedef struct
+{
     uint8_t access_address[4];
     uint32_t crc_init;
+    uint16_t max_tx_octets;
+    uint16_t max_rx_octets;
     uint8_t next_expected_rx_sn;
     uint8_t tx_sn;
-    bool supervision_started;
+} ble_link_packet_state_t;
+
+typedef struct
+{
+    bool started;
     bool rx_seen_this_interval;
     uint16_t missed_interval_count;
+} ble_link_supervision_state_t;
+
+typedef struct
+{
+    bool valid;
+    uint16_t instant;
+    uint8_t map[5];
+} ble_link_pending_channel_map_t;
+
+typedef struct
+{
+    bool valid;
+    uint16_t instant;
+    uint32_t window_offset_us;
+    ble_link_conn_state_t conn;
+} ble_link_pending_conn_update_t;
+
+typedef struct
+{
+    bool connected;
+    ble_link_conn_state_t conn;
+    ble_link_channel_state_t channel;
+    ble_link_packet_state_t packet;
+    ble_link_supervision_state_t supervision;
     uint16_t event_counter;
-    bool pending_channel_map_valid;
-    uint16_t pending_channel_map_instant;
-    uint8_t pending_channel_map[5];
+    ble_link_pending_channel_map_t pending_channel_map;
+    ble_link_pending_conn_update_t pending_conn_update;
 } ble_link_t;
 
 typedef struct
@@ -162,7 +213,12 @@ typedef struct
     uint8_t flags;
     int8_t tx_power;
     uint16_t adv_interval_ms;
-    uint16_t included_service_uuid;
+    ble_uuid_t included_service_uuid;
+    ble_gap_conn_params_t preferred_conn_params;
+    bool preferred_conn_params_valid;
+    uint8_t vendor_uuid_base[BLE_UUID128_LEN];
+    bool vendor_uuid_base_set;
+    uint8_t next_l2cap_sig_identifier;
 } ble_host_t;
 
 typedef struct
@@ -227,10 +283,19 @@ bool ble_evt_notify_gatt_characteristic(ble_gatt_char_evt_type_t evt_type,
 bool ble_evt_notify_gatt_mtu_exchange(uint16_t requested_mtu,
                                       uint16_t response_mtu,
                                       uint16_t effective_mtu);
+bool ble_uuid_is_valid(const ble_uuid_t *p_uuid);
+uint16_t ble_uuid_encoded_len(const ble_uuid_t *p_uuid);
+bool ble_uuid_encode(const ble_uuid_t *p_uuid, uint8_t *p_dst);
+bool ble_uuid_matches_bytes(const ble_uuid_t *p_uuid,
+                            const uint8_t *p_uuid_bytes,
+                            uint16_t uuid_len);
+void ble_conn_param_update_timer_init(void);
+void ble_conn_param_update_timer_start(void);
+void ble_conn_param_update_timer_stop(void);
 void controller_load_identity_address(void);
 
 void controller_runtime_init(void);
-bool controller_queue_att_payload(const uint8_t *p_att_payload, uint16_t att_len);
+bool controller_queue_l2cap_payload(uint16_t cid, const uint8_t *p_payload, uint16_t payload_len);
 void controller_disconnect_internal(void);
 
 #endif
