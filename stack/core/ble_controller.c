@@ -497,6 +497,33 @@ static void adv_timer_handler(void *p_context)
     }
 }
 
+static bool controller_connect_request_targets_us(const ble_connect_req_pdu_t *p_req)
+{
+    const uint8_t expected_payload_len =
+        (uint8_t)(sizeof(((ble_connect_req_pdu_t *)0)->initiator_address) +
+                  sizeof(((ble_connect_req_pdu_t *)0)->advertiser_address) +
+                  sizeof(((ble_connect_req_pdu_t *)0)->ll_data));
+
+    if (p_req == NULL)
+    {
+        return false;
+    }
+
+    if (p_req->payload_length != expected_payload_len)
+    {
+        return false;
+    }
+
+    if (p_req->header.rxadd != (m_ctrl_rt.adv_txadd & 0x01U))
+    {
+        return false;
+    }
+
+    return memcmp(p_req->advertiser_address,
+                  m_ctrl_rt.adv_address,
+                  sizeof(m_ctrl_rt.adv_address)) == 0;
+}
+
 static void controller_apply_connect_request(const ble_connect_req_pdu_t *p_req)
 {
     uint32_t first_event_delay_us;
@@ -649,15 +676,18 @@ static void radio_handle_connected_packet(void)
 
 static void radio_evt_handler(void)
 {
+    const ble_connect_req_pdu_t *p_req = (const ble_connect_req_pdu_t *)&m_ctrl_rt.air_pdu;
+
     if (m_link.connected)
     {
         radio_handle_connected_packet();
         return;
     }
 
-    if (m_ctrl_rt.air_pdu.header.pdu_type == LL_CONNECT_REQ)
+    if ((p_req->header.pdu_type == LL_CONNECT_REQ) &&
+        controller_connect_request_targets_us(p_req))
     {
-        controller_apply_connect_request((const ble_connect_req_pdu_t *)&m_ctrl_rt.air_pdu);
+        controller_apply_connect_request(p_req);
     }
 }
 void ble_start_advertising(void)

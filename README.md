@@ -25,6 +25,8 @@ layers so packet flow is easy to follow in code.
 - Passive data length extension support
 - ATT MTU negotiation up to 247 bytes when the peer performs the LL length
   procedure
+- Legacy advertising connect-request validation against the local advertiser
+  address and address type
 - Internal delayed connection parameter update request after connect
 - One RX and one TX exchange per connection interval
 - Single pending connected TX slot shared by notifications, ATT responses, and
@@ -79,9 +81,9 @@ interface.
   Shared runtime state, small utilities, identity address generation, and
   deferred event delivery through `SWI1_EGU1`.
 - `ble_controller.c`
-  Advertising, connect-request handling, connection-event timing, LL control,
-  retransmission behavior, DLE parameter tracking, and ATT/L2CAP packet
-  transport.
+  Advertising, connect-request validation and handling, connection-event
+  timing, LL control, retransmission behavior, DLE parameter tracking, and
+  ATT/L2CAP packet transport.
 - `ble_gatt_server.c`
   ATT database construction, 16-bit and vendor-base UUID expansion for
   discovery responses, ATT request handling, CCCD tracking, MTU negotiation,
@@ -218,9 +220,10 @@ The normal peripheral flow is:
    service table.
 7. `ble_start_advertising()` starts repeated advertising events on channels 37,
    38, and 39.
-8. When a `CONNECT_REQ` is received, the controller switches to connected mode,
-   starts connection-event timing with `TIMER2`, and begins using the data
-   channel map from the request.
+8. When a `CONNECT_REQ` that targets the local advertiser address and address
+   type is received, the controller switches to connected mode, starts
+   connection-event timing with `TIMER2`, and begins using the data channel map
+   from the request.
 9. If the peer performs the LL length procedure, the controller updates the
    usable LL payload size and ATT MTU negotiation can grow up to 247 bytes.
 10. About six seconds after connect, the stack sends an L2CAP Connection
@@ -240,6 +243,8 @@ The normal peripheral flow is:
 - Characteristic values and current lengths live directly in
   `ble_gatt_characteristic_t`.
 - `ble_controller.c` owns BLE packet flow, timing, and LL control handling.
+- The controller only accepts legacy `CONNECT_REQ` packets whose advertiser
+  address and `RxAdd` bit match the current advertising identity.
 - `radio_driver.c` owns direct `NRF_RADIO` access.
 - The connected data path intentionally uses a simple one-RX / one-TX-per-
   interval model.
