@@ -25,6 +25,7 @@ static void start_advertising(void);
 static void clock_init(void);
 static uint32_t timer_ticks_clamped(uint32_t ms);
 static void timer_stop_if_started(app_timer_id_t timer_id);
+static const char *ble_phy_name(uint8_t phy);
 
 static const char m_dev_name[] = "nrf-ble";
 static uint8_t m_counter_char_value; 
@@ -38,7 +39,7 @@ static const ble_gap_conn_params_t m_gap_conn_params = {
     .min_conn_interval_1p25ms = MS_TO_1P25MS_UNITS(30U),
     .max_conn_interval_1p25ms = MS_TO_1P25MS_UNITS(30U),
     .slave_latency = 0U,
-    .supervision_timeout_10ms = MS_TO_10MS_UNITS(720U),
+    .supervision_timeout_10ms = MS_TO_10MS_UNITS(1500U),
 };
 static const ble_adv_config_t m_adv_config = {
   .flags = (uint8_t)(BLE_GAP_ADV_FLAG_LE_GENERAL_DISC_MODE |
@@ -143,6 +144,21 @@ static void timer_stop_if_started(app_timer_id_t timer_id)
   }
 }
 
+static const char *ble_phy_name(uint8_t phy)
+{
+  switch (phy)
+  {
+  case BLE_GAP_PHY_1MBPS:
+    return "1M";
+
+  case BLE_GAP_PHY_2MBPS:
+    return "2M";
+
+  default:
+    return "unknown";
+  }
+}
+
 static void measurement_timer_handler(void *p_context)
 {
   (void)p_context;
@@ -180,6 +196,12 @@ static void ble_evt_handler(const ble_evt_t *p_evt)
                (int)p_evt->params.gap.conn_interval_ms,
                (int)p_evt->params.gap.slave_latency,
                (int)p_evt->params.gap.supervision_timeout_ms);
+    return;
+
+  case BLE_GAP_EVT_PHY_UPDATE_IND:
+    log_printf("BLE GAP: PHY updated, tx=%s rx=%s\n",
+               ble_phy_name(p_evt->params.gap.tx_phy),
+               ble_phy_name(p_evt->params.gap.rx_phy));
     return;
 
   case BLE_GAP_EVT_TERMINATE_IND:

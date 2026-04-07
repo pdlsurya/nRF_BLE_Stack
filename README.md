@@ -23,6 +23,7 @@ layers so packet flow is easy to follow in code.
 - GATT write and notification-state callbacks
 - Deferred BLE events through low-priority software interrupt
 - Passive data length extension support
+- Passive LE 2M PHY update support
 - ATT MTU negotiation up to 247 bytes when the peer performs the LL length
   procedure
 - Legacy advertising connect-request validation against the local advertiser
@@ -112,8 +113,11 @@ interface.
   - `BLE_GAP_EVT_DISCONNECTED`
   - `BLE_GAP_EVT_SUPERVISION_TIMEOUT`
   - `BLE_GAP_EVT_CONN_UPDATE_IND`
+  - `BLE_GAP_EVT_PHY_UPDATE_IND`
   - `BLE_GAP_EVT_TERMINATE_IND`
   - `BLE_GATT_EVT_MTU_EXCHANGE`
+- GAP events also expose the current `tx_phy` and `rx_phy` so applications can
+  log or react when a PHY update takes effect.
 - Characteristic-specific events are delivered through each characteristic's
   `evt_handler`.
 - `ble_gatt_char_evt_t` carries the event type plus `p_characteristic`. For
@@ -226,12 +230,16 @@ The normal peripheral flow is:
    from the request.
 9. If the peer performs the LL length procedure, the controller updates the
    usable LL payload size and ATT MTU negotiation can grow up to 247 bytes.
-10. About six seconds after connect, the stack sends an L2CAP Connection
+10. If the peer performs the LL PHY procedure, the controller advertises
+    `1M | 2M` support, schedules the selected PHYs for the requested instant,
+    and applies the RX/TX PHY change at the start of the matching connection
+    event.
+11. About six seconds after connect, the stack sends an L2CAP Connection
     Parameter Update Request if preferred parameters were configured.
-11. Each connection interval is handled as one RX and one TX exchange. Any ATT
+12. Each connection interval is handled as one RX and one TX exchange. Any ATT
     response, notification, or signaling PDU generated from the received packet
     is queued for the next connection event.
-12. Stack-level BLE events and characteristic callbacks are delivered later
+13. Stack-level BLE events and characteristic callbacks are delivered later
     from `SWI1_EGU1_IRQHandler()`.
 
 ## Design Notes
@@ -245,6 +253,8 @@ The normal peripheral flow is:
 - `ble_controller.c` owns BLE packet flow, timing, and LL control handling.
 - The controller only accepts legacy `CONNECT_REQ` packets whose advertiser
   address and `RxAdd` bit match the current advertising identity.
+- LE PHY updates stay within the same simple event model by configuring the
+  event RX PHY before listening and the TX PHY just before responding.
 - `radio_driver.c` owns direct `NRF_RADIO` access.
 - The connected data path intentionally uses a simple one-RX / one-TX-per-
   interval model.
@@ -257,9 +267,10 @@ The normal peripheral flow is:
 - No L2CAP fragmentation or reassembly
 - No security, pairing, or bonding
 - No long writes or prepare/execute write support
-- No LE 2M PHY support in the connected data path
 - Data length extension is passive only; the stack responds to the peer's LL
   length procedure but does not initiate it
+- PHY update is passive only; the stack responds to the peer's LL PHY
+  procedure but does not initiate it
 - The delayed connection parameter update request is one-shot and uses the same
   single pending TX slot as other outgoing connected traffic
 

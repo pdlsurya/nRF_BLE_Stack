@@ -22,6 +22,8 @@
 #define BLE_GAP_ADV_FLAG_BR_EDR_NOT_SUPPORTED  0x04U
 #define BLE_GAP_ADV_FLAG_LE_BR_EDR_CONTROLLER  0x08U
 #define BLE_GAP_ADV_FLAG_LE_BR_EDR_HOST        0x10U
+#define BLE_GAP_PHY_1MBPS                      0x01U
+#define BLE_GAP_PHY_2MBPS                      0x02U
 
 #define BLE_ADV_INTERVAL_MS_DEFAULT 100U
 #define MS_TO_1P25MS_UNITS(ms) \
@@ -57,6 +59,7 @@ typedef enum
     BLE_GAP_EVT_DISCONNECTED,
     BLE_GAP_EVT_SUPERVISION_TIMEOUT,
     BLE_GAP_EVT_CONN_UPDATE_IND,
+    BLE_GAP_EVT_PHY_UPDATE_IND,
     BLE_GAP_EVT_TERMINATE_IND,
     BLE_GATT_EVT_MTU_EXCHANGE
 } ble_evt_type_t;
@@ -66,6 +69,8 @@ typedef struct
     uint16_t conn_interval_ms;
     uint16_t slave_latency;
     uint16_t supervision_timeout_ms;
+    uint8_t tx_phy;
+    uint8_t rx_phy;
 } ble_gap_evt_params_t;
 
 typedef struct

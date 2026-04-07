@@ -96,6 +96,8 @@ static bool ble_evt_notify_stack(ble_evt_type_t evt_type,
         evt.params.stack_evt.params.gap.conn_interval_ms = m_link.conn.conn_interval_ms;
         evt.params.stack_evt.params.gap.slave_latency = m_link.conn.slave_latency;
         evt.params.stack_evt.params.gap.supervision_timeout_ms = m_link.conn.supervision_timeout_ms;
+        evt.params.stack_evt.params.gap.tx_phy = m_link.phy.tx_phy;
+        evt.params.stack_evt.params.gap.rx_phy = m_link.phy.rx_phy;
     }
 
     return ble_evt_post(&evt);

@@ -22,13 +22,18 @@ typedef enum
 	RADIO_MODE_RX
 } radio_mode_t;
 
-typedef void (*radio_event_handler_t)(void);
+typedef enum
+{
+	RADIO_EVENT_BCMATCH,
+	RADIO_EVENT_CRC_OK,
+	RADIO_EVENT_CRC_ERROR,
+	RADIO_EVENT_DISABLED
+} radio_event_t;
+
+typedef void (*radio_event_handler_t)(radio_event_t evt);
 
 typedef enum
 {
-
-	RADIO_1MBPS,
-	RADIO_2MBPS,
 	BLE_1MBPS = 3,
 	BLE_2MBPS
 } radio_data_rate_t;
@@ -66,22 +71,22 @@ typedef enum
 
 typedef enum
 {
-	RADIO_DEFAULT_TX_CENTER,
-	RADIO_DEFAULT_TX_B0,
-	RADIO_DEFAULT_TX_B1
+	RADIO_DEFAULT_TX_B1 = 0,
+	RADIO_DEFAULT_TX_B0 = 1,
+	RADIO_DEFAULT_TX_CENTER = 2
 } radio_default_tx_t;
 
 void radio_set_event_handler(radio_event_handler_t handler);
 
-void radio_set_mode(radio_mode_t mode);
+void radio_enable_interrupt_mask(uint32_t interrupt_mask);
 
-void radio_rx();
+void radio_cfg_drate_plen_and_enable_mode(radio_mode_t mode,
+					  radio_data_rate_t data_rate,
+					  radio_preamble_length_t preamble_length);
 
 void radio_tx_rx();
 
 void radio_set_address(const uint8_t *address, uint8_t length, uint8_t logical_address);
-
-void radio_enable_interrupts(void);
 
 static inline radio_state_t radio_get_state()
 {
@@ -101,11 +106,6 @@ static inline void radio_disable()
 		;
 
 	NRF_RADIO->EVENTS_DISABLED = 0;
-}
-
-static inline uint8_t radio_get_crc_status()
-{
-	return NRF_RADIO->CRCSTATUS;
 }
 
 static inline void radio_set_frequency(uint32_t frequency)
@@ -140,20 +140,10 @@ static inline void radio_set_s0_field_size(uint8_t bytes)
 	NRF_RADIO->PCNF0 |= (uint32_t)bytes << 8;
 }
 
-static inline void radio_set_s1_field_size(uint8_t bits)
-{
-	NRF_RADIO->PCNF0 |= (uint32_t)bits << 16;
-}
-
 static inline void radio_set_preamble_length(radio_preamble_length_t preamble_length)
 {
 	NRF_RADIO->PCNF0 &= ~((uint32_t)0x3U << 24);
 	NRF_RADIO->PCNF0 |= (uint32_t)preamble_length << 24;
-}
-
-static inline void radio_set_static_payload_size(uint32_t static_pl_size)
-{
-	NRF_RADIO->PCNF1 |= (uint32_t)static_pl_size << 8; // static  payload length
 }
 
 static inline void radio_set_max_payload_size(uint32_t max_pl_size)
@@ -180,11 +170,6 @@ static inline void radio_enable_whitening(bool en)
 	{
 		NRF_RADIO->PCNF1 |= ((uint32_t)1U) << 25;
 	}
-}
-
-static inline uint8_t radio_get_received_address()
-{
-	return NRF_RADIO->RXMATCH;
 }
 
 static inline void radio_set_tx_logical_address(uint8_t logical_address)
@@ -242,21 +227,19 @@ static inline void radio_clear_crc_events(void)
 	NRF_RADIO->EVENTS_CRCERROR = 0U;
 }
 
+static inline void radio_clear_bcmatch_event(void)
+{
+	NRF_RADIO->EVENTS_BCMATCH = 0U;
+}
+
+static inline void radio_set_bcc(uint32_t bit_count)
+{
+	NRF_RADIO->BCC = bit_count;
+}
+
 static inline void radio_wait_ready(void)
 {
 	while (NRF_RADIO->EVENTS_READY == 0U)
-		;
-}
-
-static inline void radio_wait_end(void)
-{
-	while (NRF_RADIO->EVENTS_END == 0U)
-		;
-}
-
-static inline void radio_wait_disabled(void)
-{
-	while (NRF_RADIO->EVENTS_DISABLED == 0U)
 		;
 }
 

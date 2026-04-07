@@ -10,7 +10,6 @@
  */
 
 #include <stdint.h>
-#include <string.h>
 #include "boards.h"
 #include "radio_driver.h"
 
@@ -24,6 +23,7 @@ static void radio_clear_events(void)
     radio_clear_end_event();
     radio_clear_disabled_event();
     NRF_RADIO->EVENTS_ADDRESS = 0U;
+    radio_clear_bcmatch_event();
     radio_clear_crc_events();
 }
 
@@ -32,7 +32,48 @@ void radio_set_event_handler(radio_event_handler_t evt_handler)
     radio_event_handler = evt_handler;
 }
 
-void radio_set_mode(radio_mode_t mode)
+void radio_enable_interrupt_mask(uint32_t interrupt_mask)
+{
+    NRF_RADIO->INTENCLR = 0xFFFFFFFFUL;
+    radio_clear_bcmatch_event();
+    radio_clear_crc_events();
+    radio_clear_disabled_event();
+    NRF_RADIO->INTENSET = interrupt_mask;
+
+    NVIC_SetPriority(RADIO_IRQn, RADIO_IRQ_PRIORITY);
+    NVIC_EnableIRQ(RADIO_IRQn);
+}
+
+void radio_cfg_drate_plen_and_enable_mode(radio_mode_t mode,
+                                          radio_data_rate_t data_rate,
+                                          radio_preamble_length_t preamble_length)
+{
+    if (radio_get_state() != DISABLED)
+    {
+        radio_disable();
+    }
+
+    radio_set_data_rate(data_rate);
+    radio_set_preamble_length(preamble_length);
+    radio_clear_events();
+
+    switch (mode)
+    {
+    case RADIO_MODE_TX:
+        radio_tx_enable();
+        break;
+    case RADIO_MODE_RX:
+        radio_rx_enable();
+        break;
+    default:
+        break;
+    }
+
+    radio_wait_ready();
+    radio_clear_ready_event();
+}
+
+static void radio_set_mode(radio_mode_t mode)
 {
     if (!(radio_get_state() == DISABLED))
     {
@@ -55,33 +96,6 @@ void radio_set_mode(radio_mode_t mode)
 
     radio_wait_ready();
     radio_clear_ready_event();
-}
-
-void radio_tx()
-{
-    if (radio_get_state() != TX_IDLE)
-    {
-        radio_set_mode(RADIO_MODE_TX);
-    }
-
-    radio_start();
-
-    radio_wait_end();
-    radio_clear_end_event();
-
-    radio_disable();
-}
-
-void radio_rx()
-{
-    if (radio_get_state() != RX_IDLE)
-    {
-        radio_set_mode(RADIO_MODE_RX);
-    }
-
-    radio_clear_crc_events();
-    radio_clear_end_event();
-    radio_start();
 }
 
 void radio_tx_rx()
@@ -137,31 +151,45 @@ void radio_set_address(const uint8_t *address, uint8_t length, uint8_t logical_a
     }
 }
 
-void radio_enable_interrupts()
-{
-    NRF_RADIO->INTENCLR = 0xFFFFFFFFUL;
-    radio_clear_crc_events();
-    NRF_RADIO->INTENSET = RADIO_INTENSET_CRCOK_Msk | RADIO_INTENSET_CRCERROR_Msk;
-
-    NVIC_SetPriority(RADIO_IRQn, RADIO_IRQ_PRIORITY);
-    NVIC_EnableIRQ(RADIO_IRQn);
-}
-
 void RADIO_IRQHandler(void)
 {
-    if (NRF_RADIO->EVENTS_CRCERROR)
+    if (NRF_RADIO->EVENTS_BCMATCH)
     {
-        NRF_RADIO->EVENTS_CRCERROR = 0U;
-        return;
-    }
-
-    if (NRF_RADIO->EVENTS_CRCOK)
-    {
-        NRF_RADIO->EVENTS_CRCOK = 0;
+        NRF_RADIO->EVENTS_BCMATCH = 0U;
 
         if (radio_event_handler != 0)
         {
-            radio_event_handler();
+            radio_event_handler(RADIO_EVENT_BCMATCH);
         }
     }
+
+    if (NRF_RADIO->EVENTS_CRCERROR)
+    {
+        NRF_RADIO->EVENTS_CRCERROR = 0U;
+
+        if (radio_event_handler != 0)
+        {
+            radio_event_handler(RADIO_EVENT_CRC_ERROR);
+        }
+    }
+    else if (NRF_RADIO->EVENTS_CRCOK)
+    {
+        NRF_RADIO->EVENTS_CRCOK = 0U;
+
+        if (radio_event_handler != 0)
+        {
+            radio_event_handler(RADIO_EVENT_CRC_OK);
+        }
+    }
+
+    if (NRF_RADIO->EVENTS_DISABLED)
+    {
+        NRF_RADIO->EVENTS_DISABLED = 0U;
+
+        if (radio_event_handler != 0)
+        {
+            radio_event_handler(RADIO_EVENT_DISABLED);
+        }
+    }
+
 }

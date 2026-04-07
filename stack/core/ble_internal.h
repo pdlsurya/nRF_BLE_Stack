@@ -22,7 +22,7 @@
 #define BLE_MAX_ADV_DATA_LEN 31U
 #define BLE_ADV_PDU_OVERHEAD 6U
 #define BLE_ADV_NAME_MAX_LEN 20U
-#define BLE_IDENTITY_SALT 0x434D535456324C33ULL
+#define BLE_IDENTITY_SALT 0x434D535456324C35ULL
 #define BLE_L2CAP_CID_ATT 0x0004U
 #define BLE_L2CAP_CID_SIGNALING 0x0005U
 #define BLE_L2CAP_HDR_LEN 4U
@@ -32,7 +32,7 @@
 #define BLE_L2CAP_SIG_CONN_PARAM_ACCEPTED 0x0000U
 #define BLE_L2CAP_SIG_CONN_PARAM_REJECTED 0x0001U
 #define BLE_ADV_RX_WINDOW_US 1500U
-#define BLE_CONN_EVENT_GUARD_US 500U
+#define BLE_CONN_EVENT_GUARD_US 5000U
 #define BLE_CONN_TIMER_PRESCALER 4U
 #define BLE_CONN_TIMER_IRQ_PRIORITY 0U
 #define BLE_EVT_IRQ_PRIORITY 6U
@@ -60,7 +60,9 @@
 #define BLE_LL_COMPANY_ID_NORDIC 0x0059U
 #define BLE_LL_SUBVERSION 0x0000U
 #define BLE_LL_FEATURE_DATA_LENGTH_EXTENSION 0x20U
+#define BLE_LL_FEATURE_2M_PHY 0x01U
 #define BLE_LL_PHY_1M 0x01U
+#define BLE_LL_PHY_2M 0x02U
 
 static inline uint32_t irq_lock(void)
 {
@@ -175,6 +177,12 @@ typedef struct
 
 typedef struct
 {
+    uint8_t tx_phy;
+    uint8_t rx_phy;
+} ble_link_phy_state_t;
+
+typedef struct
+{
     bool started;
     bool rx_seen_this_interval;
     uint16_t missed_interval_count;
@@ -197,14 +205,23 @@ typedef struct
 
 typedef struct
 {
+    bool valid;
+    uint16_t instant;
+    ble_link_phy_state_t phy;
+} ble_link_pending_phy_update_t;
+
+typedef struct
+{
     bool connected;
     ble_link_conn_state_t conn;
     ble_link_channel_state_t channel;
     ble_link_packet_state_t packet;
+    ble_link_phy_state_t phy;
     ble_link_supervision_state_t supervision;
     uint16_t event_counter;
     ble_link_pending_channel_map_t pending_channel_map;
     ble_link_pending_conn_update_t pending_conn_update;
+    ble_link_pending_phy_update_t pending_phy_update;
 } ble_link_t;
 
 typedef struct
@@ -221,6 +238,20 @@ typedef struct
     uint8_t next_l2cap_sig_identifier;
 } ble_host_t;
 
+typedef enum
+{
+    BLE_CONN_RADIO_PHASE_IDLE = 0,
+    BLE_CONN_RADIO_PHASE_WAIT_RX_DISABLED,
+    BLE_CONN_RADIO_PHASE_WAIT_TX_DISABLED,
+} ble_conn_radio_phase_t;
+
+typedef struct
+{
+    bool tx_acked;
+    bool is_new_packet;
+    bool consumes_pending;
+} ble_conn_bcmatch_state_t;
+
 typedef struct
 {
     ble_ll_adv_pdu_t air_pdu;
@@ -232,6 +263,9 @@ typedef struct
     uint8_t adv_txadd;
     bool tx_unacked;
     bool has_pending_conn_tx_pdu;
+    bool conn_rx_process_pending;
+    ble_conn_radio_phase_t conn_radio_phase;
+    ble_conn_bcmatch_state_t conn_bcmatch;
     uint32_t conn_next_event_tick_us;
 } ble_ctrl_runtime_t;
 
