@@ -22,7 +22,7 @@ static void radio_clear_events(void)
     radio_clear_ready_event();
     radio_clear_end_event();
     radio_clear_disabled_event();
-    NRF_RADIO->EVENTS_ADDRESS = 0U;
+    radio_clear_address_event();
     radio_clear_bcmatch_event();
     radio_clear_crc_events();
 }
@@ -35,6 +35,7 @@ void radio_set_event_handler(radio_event_handler_t evt_handler)
 void radio_enable_interrupt_mask(uint32_t interrupt_mask)
 {
     NRF_RADIO->INTENCLR = 0xFFFFFFFFUL;
+    radio_clear_ready_event();
     radio_clear_bcmatch_event();
     radio_clear_crc_events();
     radio_clear_disabled_event();
@@ -98,9 +99,9 @@ static void radio_set_mode(radio_mode_t mode)
     radio_clear_ready_event();
 }
 
-void radio_tx_rx()
+void radio_tx_then_rx(uint32_t tx_packet_ptr, uint32_t rx_packet_ptr)
 {
-    // Reset shorcuts between tasks and events
+    // Start in TX, then hand PACKETPTR over to RX before the TX->RX shortcut fires.
     radio_set_shorts(0U);
     if (radio_get_state() != TX_IDLE)
     {
@@ -109,10 +110,11 @@ void radio_tx_rx()
     radio_clear_crc_events();
     radio_clear_end_event();
     radio_clear_disabled_event();
-    radio_set_shorts(RADIO_SHORTS_END_DISABLE_Msk |
-                     RADIO_SHORTS_DISABLED_RXEN_Msk |
-                     RADIO_SHORTS_READY_START_Msk);
+    radio_clear_ready_event();
+    radio_set_packet_ptr(tx_packet_ptr);
+    radio_set_shorts(RADIO_SHORTS_END_DISABLE_Msk | RADIO_SHORTS_DISABLED_RXEN_Msk | RADIO_SHORTS_READY_START_Msk);
     radio_start();
+    radio_set_packet_ptr(rx_packet_ptr);
 }
 
 void radio_set_address(const uint8_t *address, uint8_t length, uint8_t logical_address)
@@ -153,6 +155,16 @@ void radio_set_address(const uint8_t *address, uint8_t length, uint8_t logical_a
 
 void RADIO_IRQHandler(void)
 {
+    if (NRF_RADIO->EVENTS_READY)
+    {
+        NRF_RADIO->EVENTS_READY = 0U;
+
+        if (radio_event_handler != 0)
+        {
+            radio_event_handler(RADIO_EVENT_READY);
+        }
+    }
+
     if (NRF_RADIO->EVENTS_BCMATCH)
     {
         NRF_RADIO->EVENTS_BCMATCH = 0U;
@@ -191,5 +203,4 @@ void RADIO_IRQHandler(void)
             radio_event_handler(RADIO_EVENT_DISABLED);
         }
     }
-
 }

@@ -20,7 +20,7 @@
 #include "radio_driver.h"
 
 #define BLE_MAX_ADV_DATA_LEN 31U
-#define BLE_ADV_PDU_OVERHEAD 6U
+#define BLE_ADV_ADVERTISER_ADDRESS_LEN 6U
 #define BLE_ADV_NAME_MAX_LEN 20U
 #define BLE_IDENTITY_SALT 0x434D535456324C35ULL
 #define BLE_L2CAP_CID_ATT 0x0004U
@@ -83,6 +83,9 @@ static inline void irq_unlock(uint32_t primask)
 typedef enum
 {
     LL_ADV_IND = 0x00,
+    LL_ADV_SCAN_IND = 0x06,
+    LL_SCAN_REQ = 0x03,
+    LL_SCAN_RSP = 0x04,
     LL_CONNECT_REQ = 0x05
 } ble_adv_pdu_type_t;
 
@@ -111,6 +114,22 @@ typedef struct
 
 typedef struct
 {
+    ble_ll_adv_header_t header;
+    uint8_t payload_length;
+    uint8_t scanner_address[6];
+    uint8_t advertiser_address[6];
+} __attribute__((packed)) ble_scan_req_pdu_t;
+
+typedef struct
+{
+    ble_ll_adv_header_t header;
+    uint8_t payload_length;
+    uint8_t advertiser_address[6];
+    uint8_t payload[BLE_MAX_ADV_DATA_LEN];
+} __attribute__((packed)) ble_scan_rsp_pdu_t;
+
+typedef struct
+{
     uint8_t access_address[4];
     uint8_t crc_init[3];
     uint8_t win_size;
@@ -131,6 +150,13 @@ typedef struct
     uint8_t advertiser_address[6];
     ble_ll_connect_ind_t ll_data;
 } __attribute__((packed)) ble_connect_req_pdu_t;
+
+typedef union
+{
+    ble_ll_adv_pdu_t adv;
+    ble_scan_req_pdu_t scan_req;
+    ble_connect_req_pdu_t connect_req;
+} ble_adv_rx_pdu_t;
 
 typedef struct
 {
@@ -240,6 +266,14 @@ typedef struct
 
 typedef enum
 {
+    BLE_ADV_RADIO_PHASE_IDLE = 0,
+    BLE_ADV_RADIO_PHASE_WAIT_ADV_TX_DISABLED,
+    BLE_ADV_RADIO_PHASE_WAIT_RX_DISABLED,
+    BLE_ADV_RADIO_PHASE_WAIT_SCAN_RSP_TX_DISABLED,
+} ble_adv_radio_phase_t;
+
+typedef enum
+{
     BLE_CONN_RADIO_PHASE_IDLE = 0,
     BLE_CONN_RADIO_PHASE_WAIT_RX_DISABLED,
     BLE_CONN_RADIO_PHASE_WAIT_TX_DISABLED,
@@ -254,16 +288,21 @@ typedef struct
 
 typedef struct
 {
-    ble_ll_adv_pdu_t air_pdu;
+    ble_ll_adv_pdu_t adv_tx_pdu;
+    ble_scan_rsp_pdu_t scan_rsp_pdu;
+    ble_adv_rx_pdu_t adv_rx_pdu;
     ble_ll_data_raw_pdu_t conn_rx_pdu;
     ble_ll_data_raw_pdu_t conn_tx_pdu;
     ble_ll_data_raw_pdu_t last_conn_tx_pdu;
     ble_ll_data_raw_pdu_t pending_conn_tx_pdu;
     uint8_t adv_address[6];
     uint8_t adv_txadd;
+    bool adv_scan_rsp_pending;
+    bool adv_connect_pending;
     bool tx_unacked;
     bool has_pending_conn_tx_pdu;
     bool conn_rx_process_pending;
+    ble_adv_radio_phase_t adv_radio_phase;
     ble_conn_radio_phase_t conn_radio_phase;
     ble_conn_bcmatch_state_t conn_bcmatch;
     uint32_t conn_next_event_tick_us;

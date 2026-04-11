@@ -4,9 +4,10 @@ Minimal BLE peripheral stack for nRF SoCs.
 
 This repository contains a compact educational BLE stack focused on clarity,
 small code size, and readable control flow. It implements the pieces needed for
-an application-defined BLE peripheral: advertising, connection handling,
-ATT/GATT services and characteristics, deferred application callbacks, passive
-data length extension, and delayed connection parameter update requests.
+an application-defined BLE peripheral: advertising, scan-response handling for
+active scanners, connection handling, ATT/GATT services and characteristics,
+deferred application callbacks, passive data length extension, and delayed
+connection parameter update requests.
 
 The stack is intentionally small enough to read end to end. Public API,
 controller logic, ATT/GATT handling, and radio access are kept in separate
@@ -17,6 +18,8 @@ layers so packet flow is easy to follow in code.
 - Peripheral role only
 - Advertising with configurable name, flags, TX power, interval, and one
   included service UUID
+- Minimal legacy `SCAN_RSP` support for active scanners that send `SCAN_REQ`
+  before showing or connecting
 - Standard 16-bit SIG UUIDs and vendor UUIDs expanded from one registered
   128-bit base UUID
 - Runtime registration of custom GATT services and characteristics
@@ -26,8 +29,8 @@ layers so packet flow is easy to follow in code.
 - Passive LE 2M PHY update support
 - ATT MTU negotiation up to 247 bytes when the peer performs the LL length
   procedure
-- Legacy advertising connect-request validation against the local advertiser
-  address and address type
+- Legacy advertising validation of both `SCAN_REQ` and `CONNECT_REQ` against
+  the local advertiser address and address type
 - Internal delayed connection parameter update request after connect
 - One RX and one TX exchange per connection interval
 - Single pending connected TX slot shared by notifications, ATT responses, and
@@ -82,9 +85,9 @@ interface.
   Shared runtime state, small utilities, identity address generation, and
   deferred event delivery through `SWI1_EGU1`.
 - `ble_controller.c`
-  Advertising, connect-request validation and handling, connection-event
-  timing, LL control, retransmission behavior, DLE parameter tracking, and
-  ATT/L2CAP packet transport.
+  Advertising, scan-request/connect-request validation and handling,
+  connection-event timing, LL control, retransmission behavior, DLE parameter
+  tracking, and ATT/L2CAP packet transport.
 - `ble_gatt_server.c`
   ATT database construction, 16-bit and vendor-base UUID expansion for
   discovery responses, ATT request handling, CCCD tracking, MTU negotiation,
@@ -224,22 +227,27 @@ The normal peripheral flow is:
    service table.
 7. `ble_start_advertising()` starts repeated advertising events on channels 37,
    38, and 39.
-8. When a `CONNECT_REQ` that targets the local advertiser address and address
-   type is received, the controller switches to connected mode, starts
-   connection-event timing with `TIMER2`, and begins using the data channel map
-   from the request.
-9. If the peer performs the LL length procedure, the controller updates the
+8. After each advertising transmission, the controller opens a short RX window
+   and listens for a targeted `SCAN_REQ` or `CONNECT_REQ`.
+9. When a valid `SCAN_REQ` is received, the controller sends a minimal
+   `SCAN_RSP` that carries the advertiser address so active scanners can keep
+   the advertising event visible without adding extra payload turnaround work.
+10. When a `CONNECT_REQ` that targets the local advertiser address and address
+    type is received, the controller switches to connected mode, starts
+    connection-event timing with `TIMER2`, and begins using the data channel
+    map from the request.
+11. If the peer performs the LL length procedure, the controller updates the
    usable LL payload size and ATT MTU negotiation can grow up to 247 bytes.
-10. If the peer performs the LL PHY procedure, the controller advertises
+12. If the peer performs the LL PHY procedure, the controller advertises
     `1M | 2M` support, schedules the selected PHYs for the requested instant,
     and applies the RX/TX PHY change at the start of the matching connection
     event.
-11. About six seconds after connect, the stack sends an L2CAP Connection
+13. About six seconds after connect, the stack sends an L2CAP Connection
     Parameter Update Request if preferred parameters were configured.
-12. Each connection interval is handled as one RX and one TX exchange. Any ATT
+14. Each connection interval is handled as one RX and one TX exchange. Any ATT
     response, notification, or signaling PDU generated from the received packet
     is queued for the next connection event.
-13. Stack-level BLE events and characteristic callbacks are delivered later
+15. Stack-level BLE events and characteristic callbacks are delivered later
     from `SWI1_EGU1_IRQHandler()`.
 
 ## Design Notes
@@ -251,8 +259,10 @@ The normal peripheral flow is:
 - Characteristic values and current lengths live directly in
   `ble_gatt_characteristic_t`.
 - `ble_controller.c` owns BLE packet flow, timing, and LL control handling.
-- The controller only accepts legacy `CONNECT_REQ` packets whose advertiser
-  address and `RxAdd` bit match the current advertising identity.
+- The controller only accepts legacy `SCAN_REQ` and `CONNECT_REQ` packets whose
+  advertiser address and `RxAdd` bit match the current advertising identity.
+- Scan responses are intentionally minimal so the advertising RX->TX turnaround
+  stays simple and reliable across scanners that actively probe advertisements.
 - LE PHY updates stay within the same simple event model by configuring the
   event RX PHY before listening and the TX PHY just before responding.
 - `radio_driver.c` owns direct `NRF_RADIO` access.

@@ -24,6 +24,7 @@ typedef enum
 
 typedef enum
 {
+	RADIO_EVENT_READY,
 	RADIO_EVENT_BCMATCH,
 	RADIO_EVENT_CRC_OK,
 	RADIO_EVENT_CRC_ERROR,
@@ -81,10 +82,11 @@ void radio_set_event_handler(radio_event_handler_t handler);
 void radio_enable_interrupt_mask(uint32_t interrupt_mask);
 
 void radio_cfg_drate_plen_and_enable_mode(radio_mode_t mode,
-					  radio_data_rate_t data_rate,
-					  radio_preamble_length_t preamble_length);
+										  radio_data_rate_t data_rate,
+										  radio_preamble_length_t preamble_length);
 
 void radio_tx_rx();
+void radio_tx_then_rx(uint32_t tx_packet_ptr, uint32_t rx_packet_ptr);
 
 void radio_set_address(const uint8_t *address, uint8_t length, uint8_t logical_address);
 
@@ -101,6 +103,7 @@ static inline void radio_disable()
 		return;
 	}
 
+	NRF_RADIO->EVENTS_DISABLED = 0U;
 	NRF_RADIO->TASKS_DISABLE = 1U;
 	while (NRF_RADIO->EVENTS_DISABLED == 0)
 		;
@@ -185,7 +188,7 @@ static inline void radio_set_rx_logical_address(uint8_t logical_address)
 static inline void radio_configure_crc(uint8_t crc_len, uint8_t crc_add, uint32_t crc_poly, uint32_t crc_init_val)
 {
 	NRF_RADIO->CRCCNF = (((uint32_t)crc_len) << 0) |
-	                    (((uint32_t)crc_add) << 8);
+						(((uint32_t)crc_add) << 8);
 
 	NRF_RADIO->CRCPOLY = crc_poly;
 	NRF_RADIO->CRCINIT = crc_init_val;
@@ -225,6 +228,11 @@ static inline void radio_clear_crc_events(void)
 {
 	NRF_RADIO->EVENTS_CRCOK = 0U;
 	NRF_RADIO->EVENTS_CRCERROR = 0U;
+}
+
+static inline void radio_clear_address_event(void)
+{
+	NRF_RADIO->EVENTS_ADDRESS = 0U;
 }
 
 static inline void radio_clear_bcmatch_event(void)
@@ -269,9 +277,9 @@ static inline void radio_set_tifs(uint16_t tifs_us)
 }
 
 static inline void radio_configure_modecnf0(radio_ramp_up_t ramp_up,
-						 radio_default_tx_t default_tx)
+											radio_default_tx_t default_tx)
 {
 	NRF_RADIO->MODECNF0 = ((uint32_t)ramp_up << 0) |
-			      ((uint32_t)default_tx << 8);
+						  ((uint32_t)default_tx << 8);
 }
 #endif
