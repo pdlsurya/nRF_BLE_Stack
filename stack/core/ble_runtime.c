@@ -179,6 +179,8 @@ void SWI1_EGU1_IRQHandler(void)
                 .p_characteristic = evt.params.gatt_characteristic.p_characteristic,
                 .notifications_enabled =
                     (evt.params.gatt_characteristic.evt_type == BLE_GATT_CHAR_EVT_NOTIFY_ENABLED),
+                .indications_enabled =
+                    (evt.params.gatt_characteristic.evt_type == BLE_GATT_CHAR_EVT_INDICATE_ENABLED),
             };
 
             evt.params.gatt_characteristic.p_characteristic->evt_handler(&gatt_evt);

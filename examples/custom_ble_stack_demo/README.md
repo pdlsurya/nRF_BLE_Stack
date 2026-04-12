@@ -7,7 +7,7 @@ This example:
 - initializes the stack
 - configures GAP advertising and device name
 - registers a custom GATT service with a counter characteristic and a text characteristic
-- sends periodic notifications while connected
+- sends periodic notifications or indications while connected
 - logs GAP and GATT activity over USB CDC ACM
 
 ## Requirements

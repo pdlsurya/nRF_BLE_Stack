@@ -23,7 +23,7 @@ layers so packet flow is easy to follow in code.
 - Standard 16-bit SIG UUIDs and vendor UUIDs expanded from one registered
   128-bit base UUID
 - Runtime registration of custom GATT services and characteristics
-- GATT write and notification-state callbacks
+- GATT write and notify/indicate-state callbacks
 - Deferred BLE events through low-priority software interrupt
 - Passive data length extension support
 - Passive LE 2M PHY update support
@@ -36,7 +36,7 @@ layers so packet flow is easy to follow in code.
   `TIMER0` plus fixed PPI capture for better interoperability with active
   central implementations
 - One RX and one TX exchange per connection interval
-- Single pending connected TX slot shared by notifications, ATT responses, and
+- Single pending connected TX slot shared by notifications, indications, ATT responses, and
   signaling PDUs
 
 ## Repository Layout
@@ -73,6 +73,7 @@ Main application-facing entry points:
 - `ble_gatt_server_init()`
 - `ble_start_advertising()`
 - `ble_notify_characteristic()`
+- `ble_indicate_characteristic()`
 - `ble_is_connected()`
 
 See [nrf_ble.h](stack/include/nrf_ble.h) and
@@ -83,7 +84,7 @@ interface.
 
 - `ble_stack.c`
   Public API wrapper layer. Stores host configuration, UUID base, delayed
-  connection parameter update timer, and notification helpers.
+  connection parameter update timer, and characteristic value update helpers.
 - `ble_runtime.c`
   Shared runtime state, small utilities, identity address generation, and
   deferred event delivery through `SWI1_EGU1`.
@@ -94,7 +95,7 @@ interface.
 - `ble_gatt_server.c`
   ATT database construction, 16-bit and vendor-base UUID expansion for
   discovery responses, ATT request handling, CCCD tracking, MTU negotiation,
-  and notification building.
+  and notification/indication building.
 - `radio_driver.c`
   Direct `NRF_RADIO` access hidden behind a small abstraction.
 
@@ -129,6 +130,8 @@ interface.
 - `ble_gatt_char_evt_t` carries the event type plus `p_characteristic`. For
   write events, applications read the current value from
   `p_evt->p_characteristic->p_value` and `p_evt->p_characteristic->value_len`.
+- CCCD state-change events expose `notifications_enabled` and
+  `indications_enabled` so applications can react to client configuration.
 - Both stack-level and characteristic-level callbacks are deferred to
   low-priority software interrupt context instead of being called directly from
   the radio ISR path.
@@ -248,7 +251,7 @@ The normal peripheral flow is:
 13. About six seconds after connect, the stack sends an L2CAP Connection
     Parameter Update Request if preferred parameters were configured.
 14. Each connection interval is handled as one RX and one TX exchange. Any ATT
-    response, notification, or signaling PDU generated from the received packet
+    response, notification, indication, or signaling PDU generated from the received packet
     is queued for the next connection event.
 15. Stack-level BLE events and characteristic callbacks are delivered later
     from `SWI1_EGU1_IRQHandler()`.

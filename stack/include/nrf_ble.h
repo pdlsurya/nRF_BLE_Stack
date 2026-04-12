@@ -103,5 +103,6 @@ void ble_uuid_set_vendor_base(const uint8_t uuid128[BLE_UUID128_LEN]);
 bool ble_gatt_server_init(ble_gatt_service_t *p_services, uint8_t service_count);
 bool ble_is_connected(void);
 bool ble_notify_characteristic(const ble_gatt_characteristic_t *p_characteristic);
+bool ble_indicate_characteristic(const ble_gatt_characteristic_t *p_characteristic);
 
 #endif // NRF_BLE_H__

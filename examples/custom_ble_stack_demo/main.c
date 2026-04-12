@@ -28,7 +28,7 @@ static void timer_stop_if_started(app_timer_id_t timer_id);
 static const char *ble_phy_name(uint8_t phy);
 
 static const char m_dev_name[] = "nrf-ble";
-static uint8_t m_counter_char_value; 
+static uint8_t m_counter_char_value;
 static char m_text_char_value[BLE_GATT_MAX_VALUE_LEN] = "";
 static const uint8_t m_custom_uuid_base[BLE_UUID128_LEN] = {
     0x52U, 0xD0U, 0x4FU, 0x36U, 0x7EU, 0x85U, 0x74U, 0x1CU,
@@ -52,7 +52,7 @@ static const ble_adv_config_t m_adv_config = {
 static ble_gatt_characteristic_t m_custom_characteristics[] = {
     {
         .uuid = BLE_UUID_VENDOR16_INIT(0xFFF1U),
-        .properties = (uint8_t)(BLE_GATT_CHAR_PROP_READ | BLE_GATT_CHAR_PROP_NOTIFY),
+        .properties = (uint8_t)(BLE_GATT_CHAR_PROP_READ | BLE_GATT_CHAR_PROP_NOTIFY | BLE_GATT_CHAR_PROP_INDICATE),
         .p_value = &m_counter_char_value,
         .value_len = sizeof(m_counter_char_value),
         .max_len = sizeof(m_counter_char_value),
@@ -169,10 +169,15 @@ static void measurement_timer_handler(void *p_context)
   }
 
   m_counter_char_value++;
+  if (ble_indicate_characteristic(&m_custom_characteristics[0]))
+  {
+    log_printf("BLE GATT: indicated counter=%u\n", (unsigned int)m_counter_char_value);
+    return;
+  }
+
   if (ble_notify_characteristic(&m_custom_characteristics[0]))
   {
-    log_printf("BLE GATT: notified counter=%u\n",
-               (unsigned int)m_counter_char_value);
+    log_printf("BLE GATT: notified counter=%u\n", (unsigned int)m_counter_char_value);
   }
 }
 
@@ -247,8 +252,14 @@ static void counter_char_evt_handler(const ble_gatt_char_evt_t *p_evt)
   if ((p_evt->evt_type == BLE_GATT_CHAR_EVT_NOTIFY_ENABLED) ||
       (p_evt->evt_type == BLE_GATT_CHAR_EVT_NOTIFY_DISABLED))
   {
-    log_printf("BLE GATT: counter notifications %s\n",
-               p_evt->notifications_enabled ? "enabled" : "disabled");
+    log_printf("BLE GATT: counter notifications %s\n", p_evt->notifications_enabled ? "enabled" : "disabled");
+    return;
+  }
+
+  if ((p_evt->evt_type == BLE_GATT_CHAR_EVT_INDICATE_ENABLED) ||
+      (p_evt->evt_type == BLE_GATT_CHAR_EVT_INDICATE_DISABLED))
+  {
+    log_printf("BLE GATT: counter indications %s\n", p_evt->indications_enabled ? "enabled" : "disabled");
   }
 }
 
