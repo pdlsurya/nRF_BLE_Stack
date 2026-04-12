@@ -56,7 +56,7 @@ layers so packet flow is easy to follow in code.
   Example peripheral application using the stack
 - `external/nrf5-sdk/`
   nRF5 SDK Git submodule used by the example build
-- `BLE_STACK_WALKTHROUGH.pdf`
+- `README.md`
   Architecture and packet-flow walkthrough
 
 ## Public API
@@ -291,12 +291,6 @@ The normal peripheral flow is:
   procedure but does not initiate it
 - The delayed connection parameter update request is one-shot and uses the same
   single pending TX slot as other outgoing connected traffic
-
-## Documentation
-
-For a detailed code and packet-flow explanation, read:
-
-- `BLE_STACK_WALKTHROUGH.pdf`
 
 ## License
 
