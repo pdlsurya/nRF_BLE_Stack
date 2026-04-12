@@ -100,8 +100,7 @@ void ble_gap_set_device_name(const char *p_name);
 void ble_gap_set_conn_params(const ble_gap_conn_params_t *p_params);
 bool ble_gap_update_conn_params(void);
 void ble_uuid_set_vendor_base(const uint8_t uuid128[BLE_UUID128_LEN]);
-bool ble_gatt_server_init(ble_gatt_service_t *p_services,
-                          uint8_t service_count);
+bool ble_gatt_server_init(ble_gatt_service_t *p_services, uint8_t service_count);
 bool ble_is_connected(void);
 bool ble_notify_characteristic(const ble_gatt_characteristic_t *p_characteristic);
 

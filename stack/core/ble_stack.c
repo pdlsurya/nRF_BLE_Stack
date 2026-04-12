@@ -162,9 +162,7 @@ bool ble_gap_update_conn_params(void)
 
 void ble_conn_param_update_timer_init(void)
 {
-    ret_code_t err = app_timer_create(&m_conn_param_update_timer_id,
-                                      APP_TIMER_MODE_SINGLE_SHOT,
-                                      ble_conn_param_update_timeout_handler);
+    ret_code_t err = app_timer_create(&m_conn_param_update_timer_id, APP_TIMER_MODE_SINGLE_SHOT, ble_conn_param_update_timeout_handler);
 
     if ((err != NRF_SUCCESS) && (err != NRF_ERROR_INVALID_STATE))
     {
@@ -187,9 +185,7 @@ void ble_conn_param_update_timer_start(void)
         APP_ERROR_CHECK(err);
     }
 
-    err = app_timer_start(m_conn_param_update_timer_id,
-                          APP_TIMER_TICKS(BLE_CONN_PARAM_UPDATE_DELAY_MS),
-                          NULL);
+    err = app_timer_start(m_conn_param_update_timer_id, APP_TIMER_TICKS(BLE_CONN_PARAM_UPDATE_DELAY_MS), NULL);
     APP_ERROR_CHECK(err);
 }
 

@@ -351,17 +351,12 @@ uint16_t u16_decode(const uint8_t *p_src);
 void u16_encode(uint16_t value, uint8_t *p_dst);
 void ble_evt_dispatch_init(void);
 bool ble_evt_notify_gap(ble_evt_type_t evt_type);
-bool ble_evt_notify_gatt_characteristic(ble_gatt_char_evt_type_t evt_type,
-                                        ble_gatt_characteristic_t *p_characteristic);
-bool ble_evt_notify_gatt_mtu_exchange(uint16_t requested_mtu,
-                                      uint16_t response_mtu,
-                                      uint16_t effective_mtu);
+bool ble_evt_notify_gatt_characteristic(ble_gatt_char_evt_type_t evt_type, ble_gatt_characteristic_t *p_characteristic);
+bool ble_evt_notify_gatt_mtu_exchange(uint16_t requested_mtu, uint16_t response_mtu, uint16_t effective_mtu);
 bool ble_uuid_is_valid(const ble_uuid_t *p_uuid);
 uint16_t ble_uuid_encoded_len(const ble_uuid_t *p_uuid);
 bool ble_uuid_encode(const ble_uuid_t *p_uuid, uint8_t *p_dst);
-bool ble_uuid_matches_bytes(const ble_uuid_t *p_uuid,
-                            const uint8_t *p_uuid_bytes,
-                            uint16_t uuid_len);
+bool ble_uuid_matches_bytes(const ble_uuid_t *p_uuid, const uint8_t *p_uuid_bytes, uint16_t uuid_len);
 void ble_conn_param_update_timer_init(void);
 void ble_conn_param_update_timer_start(void);
 void ble_conn_param_update_timer_stop(void);

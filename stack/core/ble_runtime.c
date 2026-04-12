@@ -68,9 +68,7 @@ void ble_evt_dispatch_init(void)
     NVIC_EnableIRQ(SWI1_EGU1_IRQn);
 }
 
-static bool ble_evt_notify_stack(ble_evt_type_t evt_type,
-                                 const ble_gap_evt_params_t *p_gap_params,
-                                 const ble_gatt_evt_params_t *p_gatt_params)
+static bool ble_evt_notify_stack(ble_evt_type_t evt_type, const ble_gap_evt_params_t *p_gap_params, const ble_gatt_evt_params_t *p_gatt_params)
 {
     ble_deferred_evt_t evt;
 
@@ -108,8 +106,7 @@ bool ble_evt_notify_gap(ble_evt_type_t evt_type)
     return ble_evt_notify_stack(evt_type, NULL, NULL);
 }
 
-bool ble_evt_notify_gatt_characteristic(ble_gatt_char_evt_type_t evt_type,
-                                        ble_gatt_characteristic_t *p_characteristic)
+bool ble_evt_notify_gatt_characteristic(ble_gatt_char_evt_type_t evt_type, ble_gatt_characteristic_t *p_characteristic)
 {
     ble_deferred_evt_t evt;
 
@@ -125,9 +122,7 @@ bool ble_evt_notify_gatt_characteristic(ble_gatt_char_evt_type_t evt_type,
     return ble_evt_post(&evt);
 }
 
-bool ble_evt_notify_gatt_mtu_exchange(uint16_t requested_mtu,
-                                      uint16_t response_mtu,
-                                      uint16_t effective_mtu)
+bool ble_evt_notify_gatt_mtu_exchange(uint16_t requested_mtu, uint16_t response_mtu, uint16_t effective_mtu)
 {
     const ble_gatt_evt_params_t params = {
         .requested_mtu = requested_mtu,
