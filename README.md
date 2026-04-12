@@ -32,6 +32,9 @@ layers so packet flow is easy to follow in code.
 - Legacy advertising validation of both `SCAN_REQ` and `CONNECT_REQ` against
   the local advertiser address and address type
 - Internal delayed connection parameter update request after connect
+- Connection-event timing re-anchored from the central packet address using
+  `TIMER0` plus fixed PPI capture for better interoperability with active
+  central implementations
 - One RX and one TX exchange per connection interval
 - Single pending connected TX slot shared by notifications, ATT responses, and
   signaling PDUs
@@ -234,7 +237,7 @@ The normal peripheral flow is:
    the advertising event visible without adding extra payload turnaround work.
 10. When a `CONNECT_REQ` that targets the local advertiser address and address
     type is received, the controller switches to connected mode, starts
-    connection-event timing with `TIMER2`, and begins using the data channel
+    connection-event timing with `TIMER0`, and begins using the data channel
     map from the request.
 11. If the peer performs the LL length procedure, the controller updates the
    usable LL payload size and ATT MTU negotiation can grow up to 247 bytes.
@@ -263,6 +266,9 @@ The normal peripheral flow is:
   advertiser address and `RxAdd` bit match the current advertising identity.
 - Scan responses are intentionally minimal so the advertising RX->TX turnaround
   stays simple and reliable across scanners that actively probe advertisements.
+- Connected event timing uses `TIMER0` compare scheduling and the nRF52840
+  fixed PPI `RADIO ADDRESS -> TIMER0 CAPTURE[1]` path to re-anchor future
+  events from the actual on-air receive timing.
 - LE PHY updates stay within the same simple event model by configuring the
   event RX PHY before listening and the TX PHY just before responding.
 - `radio_driver.c` owns direct `NRF_RADIO` access.
@@ -274,6 +280,8 @@ The normal peripheral flow is:
 ## Limitations
 
 - No central role or scanning support
+- `TIMER0` is reserved by the controller for connection timing and radio-anchor
+  capture
 - No L2CAP fragmentation or reassembly
 - No security, pairing, or bonding
 - No long writes or prepare/execute write support

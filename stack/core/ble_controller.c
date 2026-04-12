@@ -22,12 +22,11 @@ APP_TIMER_DEF(m_adv_timer_id);
 #define BLE_LL_DATA_HEADER_BITS 16U
 #define BLE_SCAN_REQ_PAYLOAD_LEN 12U
 #define BLE_PRIMARY_ADV_PDU_TYPE LL_ADV_IND
+#define BLE_CONN_TIMER_COMPARE_CC_INDEX 0U
+#define BLE_CONN_TIMER_CAPTURE_CC_INDEX 1U
+#define BLE_CONN_TIMER_PPI_CH_RADIO_ADDRESS_CAPTURE 26U
 #define BLE_RADIO_IRQ_MASK_ADV (RADIO_INTENSET_CRCOK_Msk | RADIO_INTENSET_CRCERROR_Msk | RADIO_INTENSET_DISABLED_Msk)
 #define BLE_RADIO_IRQ_MASK_CONN (RADIO_INTENSET_BCMATCH_Msk | RADIO_INTENSET_CRCOK_Msk | RADIO_INTENSET_CRCERROR_Msk | RADIO_INTENSET_DISABLED_Msk)
-
-static void controller_reset_conn_bcmatch_state(void);
-static void controller_reset_adv_radio_state(void);
-static void controller_handle_advertising_disabled(void);
 
 static radio_data_rate_t controller_radio_data_rate_for_phy(uint8_t phy)
 {
@@ -76,31 +75,55 @@ static void controller_conn_timer_schedule_compare(void)
         compare_tick = 1U;
     }
 
-    NRF_TIMER2->EVENTS_COMPARE[0] = 0U;
-    NRF_TIMER2->CC[0] = compare_tick;
+    NRF_TIMER0->EVENTS_COMPARE[BLE_CONN_TIMER_COMPARE_CC_INDEX] = 0U;
+    NRF_TIMER0->CC[BLE_CONN_TIMER_COMPARE_CC_INDEX] = compare_tick;
 }
 
 static void controller_conn_timer_init(void)
 {
-    NRF_TIMER2->MODE = TIMER_MODE_MODE_Timer;
-    NRF_TIMER2->BITMODE = TIMER_BITMODE_BITMODE_32Bit;
-    NRF_TIMER2->PRESCALER = BLE_CONN_TIMER_PRESCALER;
-    NRF_TIMER2->SHORTS = 0U;
-    NRF_TIMER2->INTENCLR = 0xFFFFFFFFUL;
-    NRF_TIMER2->EVENTS_COMPARE[0] = 0U;
+    NRF_TIMER0->MODE = TIMER_MODE_MODE_Timer;
+    NRF_TIMER0->BITMODE = TIMER_BITMODE_BITMODE_32Bit;
+    NRF_TIMER0->PRESCALER = BLE_CONN_TIMER_PRESCALER;
+    NRF_TIMER0->SHORTS = 0U;
+    NRF_TIMER0->INTENCLR = 0xFFFFFFFFUL;
+    NRF_TIMER0->EVENTS_COMPARE[BLE_CONN_TIMER_COMPARE_CC_INDEX] = 0U;
+    NRF_TIMER0->CC[BLE_CONN_TIMER_CAPTURE_CC_INDEX] = 0U;
+    NRF_PPI->CHENCLR = (1UL << BLE_CONN_TIMER_PPI_CH_RADIO_ADDRESS_CAPTURE);
 
-    NVIC_ClearPendingIRQ(TIMER2_IRQn);
-    NVIC_SetPriority(TIMER2_IRQn, BLE_CONN_TIMER_IRQ_PRIORITY);
-    NVIC_EnableIRQ(TIMER2_IRQn);
+    NVIC_ClearPendingIRQ(TIMER0_IRQn);
+    NVIC_SetPriority(TIMER0_IRQn, BLE_CONN_TIMER_IRQ_PRIORITY);
+    NVIC_EnableIRQ(TIMER0_IRQn);
 }
 
 static void controller_conn_timer_stop(void)
 {
-    NRF_TIMER2->TASKS_STOP = 1U;
-    NRF_TIMER2->TASKS_CLEAR = 1U;
-    NRF_TIMER2->INTENCLR = TIMER_INTENCLR_COMPARE0_Msk;
-    NRF_TIMER2->EVENTS_COMPARE[0] = 0U;
+    NRF_TIMER0->TASKS_STOP = 1U;
+    NRF_TIMER0->TASKS_CLEAR = 1U;
+    NRF_TIMER0->INTENCLR = TIMER_INTENCLR_COMPARE0_Msk;
+    NRF_TIMER0->EVENTS_COMPARE[BLE_CONN_TIMER_COMPARE_CC_INDEX] = 0U;
+    NRF_TIMER0->CC[BLE_CONN_TIMER_CAPTURE_CC_INDEX] = 0U;
+    NRF_PPI->CHENCLR = (1UL << BLE_CONN_TIMER_PPI_CH_RADIO_ADDRESS_CAPTURE);
     m_ctrl_rt.conn_next_event_tick_us = 0U;
+}
+
+static uint32_t controller_conn_next_event_tick_from_anchor(uint32_t current_event_tick_us, uint16_t current_event_counter)
+{
+    uint32_t next_event_tick_us = current_event_tick_us + m_link.conn.conn_interval_us;
+
+    if (m_link.pending_conn_update.valid && ((uint16_t)(current_event_counter + 1U) == m_link.pending_conn_update.instant))
+    {
+        next_event_tick_us += m_link.pending_conn_update.window_offset_us;
+    }
+    else if (m_link.pending_conn_update.valid && (current_event_counter == m_link.pending_conn_update.instant))
+    {
+        m_link.conn = m_link.pending_conn_update.conn;
+        next_event_tick_us = current_event_tick_us + m_link.conn.conn_interval_us;
+        m_link.pending_conn_update.valid = false;
+        m_link.supervision.missed_interval_count = 0U;
+        (void)ble_evt_notify_gap(BLE_GAP_EVT_CONN_UPDATE_IND);
+    }
+
+    return next_event_tick_us;
 }
 
 static void controller_prepare_radio_common(uint8_t max_payload_size, const uint8_t *p_address, uint32_t crc_init, uint32_t packet_ptr)
@@ -350,6 +373,21 @@ static bool controller_scan_request_targets_us(const ble_scan_req_pdu_t *p_req)
     return memcmp(p_req->advertiser_address, m_ctrl_rt.adv_address, sizeof(m_ctrl_rt.adv_address)) == 0;
 }
 
+static void controller_reset_conn_bcmatch_state(void)
+{
+    m_ctrl_rt.conn_bcmatch.tx_acked = false;
+    m_ctrl_rt.conn_bcmatch.is_new_packet = false;
+    m_ctrl_rt.conn_bcmatch.consumes_pending = false;
+}
+
+static void controller_reset_adv_radio_state(void)
+{
+    m_ctrl_rt.adv_scan_rsp_pending = false;
+    m_ctrl_rt.adv_connect_pending = false;
+    m_ctrl_rt.adv_radio_phase = BLE_ADV_RADIO_PHASE_IDLE;
+    radio_set_shorts(0U);
+}
+
 void controller_disconnect_internal(void)
 {
     bool was_connected = m_link.connected;
@@ -502,21 +540,6 @@ bool controller_queue_l2cap_payload(uint16_t cid, const uint8_t *p_payload, uint
     return true;
 }
 
-static void controller_reset_conn_bcmatch_state(void)
-{
-    m_ctrl_rt.conn_bcmatch.tx_acked = false;
-    m_ctrl_rt.conn_bcmatch.is_new_packet = false;
-    m_ctrl_rt.conn_bcmatch.consumes_pending = false;
-}
-
-static void controller_reset_adv_radio_state(void)
-{
-    m_ctrl_rt.adv_scan_rsp_pending = false;
-    m_ctrl_rt.adv_connect_pending = false;
-    m_ctrl_rt.adv_radio_phase = BLE_ADV_RADIO_PHASE_IDLE;
-    radio_set_shorts(0U);
-}
-
 static void controller_stage_conn_response(bool new_tx_pdu)
 {
     radio_set_packet_ptr((uint32_t)(new_tx_pdu ? &m_ctrl_rt.conn_tx_pdu : &m_ctrl_rt.last_conn_tx_pdu));
@@ -628,17 +651,17 @@ static void controller_start_connection_event(void)
     controller_set_mode_with_phy(RADIO_MODE_RX, m_link.phy.rx_phy);
 }
 
-void TIMER2_IRQHandler(void)
+void TIMER0_IRQHandler(void)
 {
     uint32_t current_event_tick_us;
     uint32_t next_event_tick_us;
 
-    if (NRF_TIMER2->EVENTS_COMPARE[0] == 0U)
+    if (NRF_TIMER0->EVENTS_COMPARE[BLE_CONN_TIMER_COMPARE_CC_INDEX] == 0U)
     {
         return;
     }
 
-    NRF_TIMER2->EVENTS_COMPARE[0] = 0U;
+    NRF_TIMER0->EVENTS_COMPARE[BLE_CONN_TIMER_COMPARE_CC_INDEX] = 0U;
 
     if (!m_link.connected)
     {
@@ -646,7 +669,7 @@ void TIMER2_IRQHandler(void)
     }
 
     current_event_tick_us = m_ctrl_rt.conn_next_event_tick_us;
-    next_event_tick_us = current_event_tick_us + m_link.conn.conn_interval_us;
+    next_event_tick_us = controller_conn_next_event_tick_from_anchor(current_event_tick_us, m_link.event_counter);
 
     if (m_link.supervision.started)
     {
@@ -667,19 +690,6 @@ void TIMER2_IRQHandler(void)
     }
 
     m_link.supervision.rx_seen_this_interval = false;
-    if (m_link.pending_conn_update.valid && ((m_link.event_counter + 1) == m_link.pending_conn_update.instant))
-    {
-        next_event_tick_us += m_link.pending_conn_update.window_offset_us;
-    }
-    else if (m_link.pending_conn_update.valid && (m_link.event_counter == m_link.pending_conn_update.instant))
-    {
-        m_link.conn = m_link.pending_conn_update.conn;
-        next_event_tick_us = current_event_tick_us + m_link.conn.conn_interval_us;
-
-        m_link.pending_conn_update.valid = false;
-        m_link.supervision.missed_interval_count = 0U;
-        (void)ble_evt_notify_gap(BLE_GAP_EVT_CONN_UPDATE_IND);
-    }
 
     m_ctrl_rt.conn_next_event_tick_us = next_event_tick_us;
     controller_conn_timer_schedule_compare();
@@ -805,8 +815,11 @@ static void controller_apply_connect_request(const ble_connect_req_pdu_t *p_req)
     controller_conn_timer_stop();
     m_ctrl_rt.conn_next_event_tick_us = first_event_delay_us;
     controller_conn_timer_schedule_compare();
-    NRF_TIMER2->INTENSET = TIMER_INTENSET_COMPARE0_Msk;
-    NRF_TIMER2->TASKS_START = 1U;
+    NRF_TIMER0->INTENSET = TIMER_INTENSET_COMPARE0_Msk;
+    NRF_TIMER0->TASKS_CLEAR = 1U;
+    NRF_TIMER0->CC[BLE_CONN_TIMER_CAPTURE_CC_INDEX] = 0U;
+    NRF_PPI->CHENSET = (1UL << BLE_CONN_TIMER_PPI_CH_RADIO_ADDRESS_CAPTURE);
+    NRF_TIMER0->TASKS_START = 1U;
 
     (void)ble_evt_notify_gap(BLE_GAP_EVT_CONNECTED);
 }
@@ -814,8 +827,11 @@ static void controller_apply_connect_request(const ble_connect_req_pdu_t *p_req)
 static void radio_handle_connected_packet(void)
 {
     bool new_tx_pdu;
+    uint16_t current_event_counter = (uint16_t)(m_link.event_counter - 1U);
 
     m_link.supervision.rx_seen_this_interval = true;
+    m_ctrl_rt.conn_next_event_tick_us = controller_conn_next_event_tick_from_anchor(NRF_TIMER0->CC[BLE_CONN_TIMER_CAPTURE_CC_INDEX], current_event_counter);
+    controller_conn_timer_schedule_compare();
     if (m_ctrl_rt.conn_bcmatch.tx_acked)
     {
         m_ctrl_rt.tx_unacked = false;
@@ -846,7 +862,10 @@ static void radio_handle_connected_crc_error(void)
      * and answer with the current NESN to request retransmission from the central.
      */
     bool new_tx_pdu;
+    uint16_t current_event_counter = (uint16_t)(m_link.event_counter - 1U);
 
+    m_ctrl_rt.conn_next_event_tick_us = controller_conn_next_event_tick_from_anchor(NRF_TIMER0->CC[BLE_CONN_TIMER_CAPTURE_CC_INDEX], current_event_counter);
+    controller_conn_timer_schedule_compare();
     controller_reset_conn_bcmatch_state();
     m_ctrl_rt.conn_rx_process_pending = false;
     if (m_ctrl_rt.tx_unacked)
