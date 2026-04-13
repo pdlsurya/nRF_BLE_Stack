@@ -10,7 +10,7 @@
 
 APP_TIMER_DEF(m_measurement_timer_id);
 
-#define BLE_ADV_LED_IDX       BSP_BOARD_LED_0
+#define BLE_ADV_LED_IDX BSP_BOARD_LED_0
 #if (LEDS_NUMBER > 1)
 #define BLE_CONNECTED_LED_IDX BSP_BOARD_LED_3
 #else
@@ -27,12 +27,26 @@ static uint32_t timer_ticks_clamped(uint32_t ms);
 static void timer_stop_if_started(app_timer_id_t timer_id);
 static const char *ble_phy_name(uint8_t phy);
 
-static const char m_dev_name[] = "nrf-ble";
+static const char m_dev_name[] = "nRF-BLE-Custom-Stack";
 static uint8_t m_counter_char_value;
 static char m_text_char_value[BLE_GATT_MAX_VALUE_LEN] = "";
 static const uint8_t m_custom_uuid_base[BLE_UUID128_LEN] = {
-    0x52U, 0xD0U, 0x4FU, 0x36U, 0x7EU, 0x85U, 0x74U, 0x1CU,
-    0xA6U, 0x8FU, 0x4EU, 0x7AU, 0x00U, 0x00U, 0x00U, 0x00U,
+    0x52U,
+    0xD0U,
+    0x4FU,
+    0x36U,
+    0x7EU,
+    0x85U,
+    0x74U,
+    0x1CU,
+    0xA6U,
+    0x8FU,
+    0x4EU,
+    0x7AU,
+    0x00U,
+    0x00U,
+    0x00U,
+    0x00U,
 };
 static const ble_uuid_t m_custom_service_uuid = BLE_UUID_VENDOR16_INIT(0xFFF0U);
 static const ble_gap_conn_params_t m_gap_conn_params = {
@@ -42,11 +56,13 @@ static const ble_gap_conn_params_t m_gap_conn_params = {
     .supervision_timeout_10ms = MS_TO_10MS_UNITS(1500U),
 };
 static const ble_adv_config_t m_adv_config = {
-  .flags = (uint8_t)(BLE_GAP_ADV_FLAG_LE_GENERAL_DISC_MODE |
-                     BLE_GAP_ADV_FLAG_BR_EDR_NOT_SUPPORTED),
-  .tx_power = 0x08,
-  .interval_ms = 100U,
-  .p_included_service_uuid = &m_custom_service_uuid,
+    .flags = (uint8_t)(BLE_GAP_ADV_FLAG_LE_GENERAL_DISC_MODE |
+                       BLE_GAP_ADV_FLAG_BR_EDR_NOT_SUPPORTED),
+    .tx_power = 0x08,
+    .interval_ms = 100U,
+    .p_included_service_uuid = &m_custom_service_uuid,
+    .name_type = BLE_GAP_ADV_NAME_SHORT,
+    .short_name_length = 7U,
 };
 
 static ble_gatt_characteristic_t m_custom_characteristics[] = {

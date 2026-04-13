@@ -16,7 +16,7 @@ layers so packet flow is easy to follow in code.
 ## Current Scope
 
 - Peripheral role only
-- Advertising with configurable name, flags, TX power, interval, and one
+- Advertising with configurable full-name or short-name format, flags, TX power, interval, and one
   included service UUID
 - Minimal legacy `SCAN_RSP` support for active scanners that send `SCAN_REQ`
   before showing or connecting

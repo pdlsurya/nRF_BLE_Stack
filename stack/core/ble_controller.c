@@ -300,6 +300,37 @@ static bool host_add_ad_structure(uint8_t *p_adv_data_len, uint8_t type, const u
     return true;
 }
 
+static void host_add_device_name_ad_structure(uint8_t *p_adv_data_len)
+{
+    size_t full_name_len;
+    uint8_t ad_type;
+    uint8_t adv_name_len;
+
+    if ((p_adv_data_len == NULL) || (m_host.gap_device_name[0] == '\0'))
+    {
+        return;
+    }
+
+    full_name_len = strlen(m_host.gap_device_name);
+    if (m_host.adv_name_type == BLE_GAP_ADV_NAME_SHORT)
+    {
+        adv_name_len = (m_host.adv_short_name_length < full_name_len) ? m_host.adv_short_name_length : (uint8_t)full_name_len;
+        ad_type = 0x08U;
+    }
+    else
+    {
+        adv_name_len = (uint8_t)full_name_len;
+        ad_type = 0x09U;
+    }
+
+    if (adv_name_len == 0U)
+    {
+        return;
+    }
+
+    (void)host_add_ad_structure(p_adv_data_len, ad_type, (const uint8_t *)m_host.gap_device_name, adv_name_len);
+}
+
 static void host_build_adv_pdu(void)
 {
     uint8_t adv_data_len = 0U;
@@ -316,11 +347,7 @@ static void host_build_adv_pdu(void)
     (void)memcpy(m_ctrl_rt.adv_tx_pdu.mac_address, m_ctrl_rt.adv_address, sizeof(m_ctrl_rt.adv_address));
 
     (void)host_add_ad_structure(&adv_data_len, 0x01U, &m_host.flags, 1U);
-
-    if (m_host.adv_name[0] != '\0')
-    {
-        (void)host_add_ad_structure(&adv_data_len, 0x09U, (const uint8_t *)m_host.adv_name, (uint8_t)strlen(m_host.adv_name));
-    }
+    host_add_device_name_ad_structure(&adv_data_len);
 
     uuid_len = ble_uuid_encoded_len(&m_host.included_service_uuid);
     if ((uuid_len != 0U) && ble_uuid_encode(&m_host.included_service_uuid, uuid_bytes))

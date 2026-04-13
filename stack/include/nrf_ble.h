@@ -17,13 +17,13 @@
 
 #include "ble_gatt_server.h"
 
-#define BLE_GAP_ADV_FLAG_LE_LIMITED_DISC_MODE  0x01U
-#define BLE_GAP_ADV_FLAG_LE_GENERAL_DISC_MODE  0x02U
-#define BLE_GAP_ADV_FLAG_BR_EDR_NOT_SUPPORTED  0x04U
-#define BLE_GAP_ADV_FLAG_LE_BR_EDR_CONTROLLER  0x08U
-#define BLE_GAP_ADV_FLAG_LE_BR_EDR_HOST        0x10U
-#define BLE_GAP_PHY_1MBPS                      0x01U
-#define BLE_GAP_PHY_2MBPS                      0x02U
+#define BLE_GAP_ADV_FLAG_LE_LIMITED_DISC_MODE 0x01U
+#define BLE_GAP_ADV_FLAG_LE_GENERAL_DISC_MODE 0x02U
+#define BLE_GAP_ADV_FLAG_BR_EDR_NOT_SUPPORTED 0x04U
+#define BLE_GAP_ADV_FLAG_LE_BR_EDR_CONTROLLER 0x08U
+#define BLE_GAP_ADV_FLAG_LE_BR_EDR_HOST 0x10U
+#define BLE_GAP_PHY_1MBPS 0x01U
+#define BLE_GAP_PHY_2MBPS 0x02U
 
 #define BLE_ADV_INTERVAL_MS_DEFAULT 100U
 #define MS_TO_1P25MS_UNITS(ms) \
@@ -37,12 +37,20 @@
 #define UNITS_10MS_TO_MS(units) \
     ((uint16_t)((uint32_t)(units) * 10U))
 
+typedef enum
+{
+    BLE_GAP_ADV_NAME_FULL = 0,
+    BLE_GAP_ADV_NAME_SHORT
+} ble_gap_adv_name_type_t;
+
 typedef struct
 {
     uint8_t flags;
     int8_t tx_power;
     uint16_t interval_ms;
     const ble_uuid_t *p_included_service_uuid;
+    ble_gap_adv_name_type_t name_type;
+    uint8_t short_name_length;
 } ble_adv_config_t;
 
 typedef struct

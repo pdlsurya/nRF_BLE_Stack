@@ -96,7 +96,7 @@ void ble_gap_set_device_name(const char *p_name)
 {
     size_t name_len;
 
-    m_host.adv_name[0] = '\0';
+    m_host.gap_device_name[0] = '\0';
 
     if (p_name == NULL)
     {
@@ -104,13 +104,13 @@ void ble_gap_set_device_name(const char *p_name)
     }
 
     name_len = strlen(p_name);
-    if (name_len > BLE_ADV_NAME_MAX_LEN)
+    if (name_len > BLE_GAP_DEVICE_NAME_MAX_LEN)
     {
-        name_len = BLE_ADV_NAME_MAX_LEN;
+        name_len = BLE_GAP_DEVICE_NAME_MAX_LEN;
     }
 
-    (void)memcpy(m_host.adv_name, p_name, name_len);
-    m_host.adv_name[name_len] = '\0';
+    (void)memcpy(m_host.gap_device_name, p_name, name_len);
+    m_host.gap_device_name[name_len] = '\0';
 }
 
 void ble_gap_set_conn_params(const ble_gap_conn_params_t *p_params)
@@ -228,6 +228,7 @@ void ble_stack_init(void)
         .flags = (uint8_t)(BLE_GAP_ADV_FLAG_LE_GENERAL_DISC_MODE |
                            BLE_GAP_ADV_FLAG_BR_EDR_NOT_SUPPORTED),
         .adv_interval_ms = BLE_ADV_INTERVAL_MS_DEFAULT,
+        .adv_name_type = BLE_GAP_ADV_NAME_FULL,
     };
     m_link = (ble_link_t){0};
     m_ctrl_rt = (ble_ctrl_runtime_t){0};
@@ -245,11 +246,21 @@ void ble_adv_init(const ble_adv_config_t *p_config)
                                       : (uint8_t)(BLE_GAP_ADV_FLAG_LE_GENERAL_DISC_MODE |
                                                   BLE_GAP_ADV_FLAG_BR_EDR_NOT_SUPPORTED);
     m_host.tx_power = (p_config != NULL) ? p_config->tx_power : 0;
+    m_host.adv_name_type = (p_config != NULL) ? p_config->name_type : BLE_GAP_ADV_NAME_FULL;
+    m_host.adv_short_name_length = (p_config != NULL) ? p_config->short_name_length : 0U;
     m_host.adv_interval_ms = ((p_config != NULL) && (p_config->interval_ms != 0U)) ? p_config->interval_ms
                                                                                      : BLE_ADV_INTERVAL_MS_DEFAULT;
     m_host.included_service_uuid = ((p_config != NULL) && (p_config->p_included_service_uuid != NULL))
                                        ? *p_config->p_included_service_uuid
                                        : (ble_uuid_t)BLE_UUID_NONE_INIT;
+    if (m_host.adv_name_type > BLE_GAP_ADV_NAME_SHORT)
+    {
+        m_host.adv_name_type = BLE_GAP_ADV_NAME_FULL;
+    }
+    if (m_host.adv_short_name_length > BLE_GAP_DEVICE_NAME_MAX_LEN)
+    {
+        m_host.adv_short_name_length = BLE_GAP_DEVICE_NAME_MAX_LEN;
+    }
 }
 
 bool ble_notify_characteristic(const ble_gatt_characteristic_t *p_characteristic)

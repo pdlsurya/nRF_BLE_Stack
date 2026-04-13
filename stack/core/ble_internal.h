@@ -21,7 +21,7 @@
 
 #define BLE_MAX_ADV_DATA_LEN 31U
 #define BLE_ADV_ADVERTISER_ADDRESS_LEN 6U
-#define BLE_ADV_NAME_MAX_LEN 20U
+#define BLE_GAP_DEVICE_NAME_MAX_LEN 20U
 #define BLE_IDENTITY_SALT 0x434D535456324C39ULL
 #define BLE_L2CAP_CID_ATT 0x0004U
 #define BLE_L2CAP_CID_SIGNALING 0x0005U
@@ -252,10 +252,12 @@ typedef struct
 
 typedef struct
 {
-    char adv_name[BLE_ADV_NAME_MAX_LEN + 1U];
+    char gap_device_name[BLE_GAP_DEVICE_NAME_MAX_LEN + 1U];
     uint8_t flags;
     int8_t tx_power;
     uint16_t adv_interval_ms;
+    ble_gap_adv_name_type_t adv_name_type;
+    uint8_t adv_short_name_length;
     ble_uuid_t included_service_uuid;
     ble_gap_conn_params_t preferred_conn_params;
     bool preferred_conn_params_valid;

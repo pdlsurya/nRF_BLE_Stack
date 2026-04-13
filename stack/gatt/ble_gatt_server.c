@@ -762,7 +762,7 @@ static bool gatt_build_custom_attrs(ble_gatt_service_t *p_services, uint8_t serv
 
 bool ble_gatt_server_init(ble_gatt_service_t *p_services, uint8_t service_count)
 {
-    const char *p_name = (m_host.adv_name[0] != '\0') ? m_host.adv_name : "nrf-ble";
+    const char *p_name = (m_host.gap_device_name[0] != '\0') ? m_host.gap_device_name : "nrf-ble";
     size_t name_len;
     uint8_t service_idx;
 
