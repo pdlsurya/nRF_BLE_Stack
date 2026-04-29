@@ -9,7 +9,7 @@
  *
  */
 
-#include "ble_internal.h"
+#include "ble_runtime_internal.h"
 
 #include <string.h>
 
@@ -24,7 +24,10 @@ const uint32_t m_ble_crc_poly = 0x100065BU;
 const uint32_t m_adv_crc_init = 0x555555U;
 ble_host_t m_host;
 ble_link_t m_link;
-ble_evt_handler_t m_evt_handler;
+ble_gap_evt_handler_t m_gap_evt_handler;
+ble_gap_scan_report_handler_t m_scan_report_handler;
+ble_gatt_server_evt_handler_t m_gatt_server_evt_handler;
+ble_gatt_client_evt_handler_t m_gatt_client_evt_handler;
 ble_ctrl_runtime_t m_ctrl_rt;
 static ble_evt_dispatch_state_t m_evt_dispatch;
 
@@ -68,45 +71,30 @@ void ble_evt_dispatch_init(void)
     NVIC_EnableIRQ(SWI1_EGU1_IRQn);
 }
 
-static bool ble_evt_notify_stack(ble_evt_type_t evt_type, const ble_gap_evt_params_t *p_gap_params, const ble_gatt_evt_params_t *p_gatt_params)
+bool ble_evt_notify_gap(ble_gap_evt_type_t evt_type)
 {
     ble_deferred_evt_t evt;
 
-    if (m_evt_handler == NULL)
+    if (m_gap_evt_handler == NULL)
     {
         return false;
     }
 
     (void)memset(&evt, 0, sizeof(evt));
-    evt.kind = (evt_type == BLE_GATT_EVT_MTU_EXCHANGE) ? BLE_DEFERRED_EVT_KIND_GATT
-                                                       : BLE_DEFERRED_EVT_KIND_GAP;
-    evt.params.stack_evt.evt_type = evt_type;
-    if ((evt_type == BLE_GATT_EVT_MTU_EXCHANGE) && (p_gatt_params != NULL))
-    {
-        evt.params.stack_evt.params.gatt = *p_gatt_params;
-    }
-    else if (p_gap_params != NULL)
-    {
-        evt.params.stack_evt.params.gap = *p_gap_params;
-    }
-    else
-    {
-        evt.params.stack_evt.params.gap.conn_interval_ms = m_link.conn.conn_interval_ms;
-        evt.params.stack_evt.params.gap.slave_latency = m_link.conn.slave_latency;
-        evt.params.stack_evt.params.gap.supervision_timeout_ms = m_link.conn.supervision_timeout_ms;
-        evt.params.stack_evt.params.gap.tx_phy = m_link.phy.tx_phy;
-        evt.params.stack_evt.params.gap.rx_phy = m_link.phy.rx_phy;
-    }
-
+    evt.kind = BLE_DEFERRED_EVT_KIND_GAP;
+    evt.params.gap_evt.evt_type = evt_type;
+    evt.params.gap_evt.params.conn_interval_ms = m_link.conn.conn_interval_ms;
+    evt.params.gap_evt.params.slave_latency = m_link.conn.slave_latency;
+    evt.params.gap_evt.params.supervision_timeout_ms = m_link.conn.supervision_timeout_ms;
+    evt.params.gap_evt.params.tx_phy = m_link.phy.tx_phy;
+    evt.params.gap_evt.params.rx_phy = m_link.phy.rx_phy;
+    evt.params.gap_evt.params.role = m_link.role;
+    evt.params.gap_evt.params.peer_addr = m_link.peer_addr;
     return ble_evt_post(&evt);
 }
 
-bool ble_evt_notify_gap(ble_evt_type_t evt_type)
-{
-    return ble_evt_notify_stack(evt_type, NULL, NULL);
-}
-
-bool ble_evt_notify_gatt_characteristic(ble_gatt_char_evt_type_t evt_type, ble_gatt_characteristic_t *p_characteristic)
+bool ble_evt_notify_gatt_characteristic(ble_gatt_char_evt_type_t evt_type,
+                                        ble_gatt_characteristic_t *p_characteristic)
 {
     ble_deferred_evt_t evt;
 
@@ -122,15 +110,54 @@ bool ble_evt_notify_gatt_characteristic(ble_gatt_char_evt_type_t evt_type, ble_g
     return ble_evt_post(&evt);
 }
 
-bool ble_evt_notify_gatt_mtu_exchange(uint16_t requested_mtu, uint16_t response_mtu, uint16_t effective_mtu)
+bool ble_evt_notify_scan_report(const ble_gap_scan_report_t *p_report)
 {
-    const ble_gatt_evt_params_t params = {
-        .requested_mtu = requested_mtu,
-        .response_mtu = response_mtu,
-        .effective_mtu = effective_mtu,
-    };
+    ble_deferred_evt_t evt;
 
-    return ble_evt_notify_stack(BLE_GATT_EVT_MTU_EXCHANGE, NULL, &params);
+    if ((p_report == NULL) || (m_scan_report_handler == NULL))
+    {
+        return false;
+    }
+
+    (void)memset(&evt, 0, sizeof(evt));
+    evt.kind = BLE_DEFERRED_EVT_KIND_SCAN_REPORT;
+    evt.params.scan_report = *p_report;
+    return ble_evt_post(&evt);
+}
+
+bool ble_evt_notify_gatt_server_mtu_exchange(uint16_t requested_mtu,
+                                             uint16_t response_mtu,
+                                             uint16_t effective_mtu)
+{
+    ble_deferred_evt_t evt;
+
+    if (m_gatt_server_evt_handler == NULL)
+    {
+        return false;
+    }
+
+    (void)memset(&evt, 0, sizeof(evt));
+    evt.kind = BLE_DEFERRED_EVT_KIND_GATT_SERVER;
+    evt.params.gatt_server_evt.evt_type = BLE_GATT_SERVER_EVT_MTU_EXCHANGE;
+    evt.params.gatt_server_evt.params.requested_mtu = requested_mtu;
+    evt.params.gatt_server_evt.params.response_mtu = response_mtu;
+    evt.params.gatt_server_evt.params.effective_mtu = effective_mtu;
+    return ble_evt_post(&evt);
+}
+
+bool ble_evt_notify_gatt_client(const ble_gatt_client_evt_t *p_evt)
+{
+    ble_deferred_evt_t evt;
+
+    if ((p_evt == NULL) || (m_gatt_client_evt_handler == NULL))
+    {
+        return false;
+    }
+
+    (void)memset(&evt, 0, sizeof(evt));
+    evt.kind = BLE_DEFERRED_EVT_KIND_GATT_CLIENT;
+    evt.params.gatt_client = *p_evt;
+    return ble_evt_post(&evt);
 }
 
 void SWI1_EGU1_IRQHandler(void)
@@ -152,21 +179,27 @@ void SWI1_EGU1_IRQHandler(void)
         irq_unlock(primask);
 
         if ((evt.kind == BLE_DEFERRED_EVT_KIND_GAP) &&
-            (evt.params.stack_evt.evt_type == BLE_GAP_EVT_CONNECTED))
+            (evt.params.gap_evt.evt_type == BLE_GAP_EVT_CONNECTED))
         {
             ble_conn_param_update_timer_start();
         }
         else if ((evt.kind == BLE_DEFERRED_EVT_KIND_GAP) &&
-                 (evt.params.stack_evt.evt_type == BLE_GAP_EVT_DISCONNECTED))
+                 (evt.params.gap_evt.evt_type == BLE_GAP_EVT_DISCONNECTED))
         {
             ble_conn_param_update_timer_stop();
         }
 
-        if (((evt.kind == BLE_DEFERRED_EVT_KIND_GAP) ||
-             (evt.kind == BLE_DEFERRED_EVT_KIND_GATT)) &&
-            (m_evt_handler != NULL))
+        if ((evt.kind == BLE_DEFERRED_EVT_KIND_GAP) &&
+            (m_gap_evt_handler != NULL))
         {
-            m_evt_handler(&evt.params.stack_evt);
+            m_gap_evt_handler(&evt.params.gap_evt);
+            continue;
+        }
+
+        if ((evt.kind == BLE_DEFERRED_EVT_KIND_GATT_SERVER) &&
+            (m_gatt_server_evt_handler != NULL))
+        {
+            m_gatt_server_evt_handler(&evt.params.gatt_server_evt);
             continue;
         }
 
@@ -184,6 +217,20 @@ void SWI1_EGU1_IRQHandler(void)
             };
 
             evt.params.gatt_characteristic.p_characteristic->evt_handler(&gatt_evt);
+            continue;
+        }
+
+        if ((evt.kind == BLE_DEFERRED_EVT_KIND_SCAN_REPORT) &&
+            (m_scan_report_handler != NULL))
+        {
+            m_scan_report_handler(&evt.params.scan_report);
+            continue;
+        }
+
+        if ((evt.kind == BLE_DEFERRED_EVT_KIND_GATT_CLIENT) &&
+            (m_gatt_client_evt_handler != NULL))
+        {
+            m_gatt_client_evt_handler(&evt.params.gatt_client);
         }
     }
 }

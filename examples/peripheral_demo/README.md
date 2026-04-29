@@ -1,6 +1,6 @@
-# custom_ble_stack_demo
+# peripheral_demo
 
-Example BLE peripheral application for `nRF_BLE_Stack`.
+Example BLE peripheral application for `nrf-ble-stack`.
 
 This example:
 
@@ -20,7 +20,7 @@ This example:
 
 ```sh
 git submodule update --init --recursive
-make -C examples/custom_ble_stack_demo -j4
+make -C examples/peripheral_demo -j4
 ```
 
 ## Notes

@@ -15,7 +15,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define BLE_GATT_MAX_VALUE_LEN 244U
+#include "ble_att_defs.h"
+#include "ble_uuid.h"
+
 #define BLE_GATT_MAX_SERVICES 4U
 #define BLE_GATT_MAX_CHARACTERISTICS 8U
 #define BLE_GATT_CHAR_PROP_READ 0x02U
@@ -23,27 +25,6 @@
 #define BLE_GATT_CHAR_PROP_WRITE 0x08U
 #define BLE_GATT_CHAR_PROP_NOTIFY 0x10U
 #define BLE_GATT_CHAR_PROP_INDICATE 0x20U
-
-#define BLE_ATT_GATT_MAX_MTU 247U
-#define BLE_UUID16_LEN 2U
-#define BLE_UUID128_LEN 16U
-
-typedef enum
-{
-    BLE_UUID_TYPE_NONE = 0,
-    BLE_UUID_TYPE_SIG_16,
-    BLE_UUID_TYPE_VENDOR_16
-} ble_uuid_type_t;
-
-typedef struct
-{
-    ble_uuid_type_t type;
-    uint16_t value;
-} ble_uuid_t;
-
-#define BLE_UUID_NONE_INIT        { .type = BLE_UUID_TYPE_NONE, .value = 0U }
-#define BLE_UUID_SIG16_INIT(v)    { .type = BLE_UUID_TYPE_SIG_16, .value = (v) }
-#define BLE_UUID_VENDOR16_INIT(v) { .type = BLE_UUID_TYPE_VENDOR_16, .value = (v) }
 
 typedef struct ble_gatt_characteristic_s ble_gatt_characteristic_t;
 
@@ -87,6 +68,27 @@ typedef struct
     uint16_t service_handle;
 } ble_gatt_service_t;
 
+typedef enum
+{
+    BLE_GATT_SERVER_EVT_MTU_EXCHANGE = 0,
+} ble_gatt_server_evt_type_t;
+
+typedef struct
+{
+    uint16_t requested_mtu;
+    uint16_t response_mtu;
+    uint16_t effective_mtu;
+} ble_gatt_server_evt_params_t;
+
+typedef struct
+{
+    ble_gatt_server_evt_type_t evt_type;
+    ble_gatt_server_evt_params_t params;
+} ble_gatt_server_evt_t;
+
+typedef void (*ble_gatt_server_evt_handler_t)(const ble_gatt_server_evt_t *p_evt);
+
+void ble_gatt_server_register_evt_handler(ble_gatt_server_evt_handler_t handler);
 bool ble_gatt_server_init(ble_gatt_service_t *p_services, uint8_t service_count);
 void ble_gatt_server_reset_connection_state(void);
 uint16_t ble_gatt_server_build_notification(uint16_t value_handle, uint8_t *p_att, uint16_t max_len);
@@ -95,4 +97,4 @@ void ble_gatt_server_mark_indication_pending(void);
 
 uint16_t ble_gatt_server_process_request(const uint8_t *p_att, uint16_t att_len, uint8_t *p_rsp, uint16_t rsp_max_len);
 
-#endif
+#endif /* BLE_GATT_SERVER_H__ */

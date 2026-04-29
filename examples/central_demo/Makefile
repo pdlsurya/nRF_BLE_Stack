@@ -1,4 +1,4 @@
-PROJECT_NAME     := custom_ble_stack_demo_pca10059
+PROJECT_NAME     := central_demo_pca10059
 TARGETS          := nrf52840_xxaa
 OUTPUT_DIRECTORY := _build
 BLE_STACK_DIR := ../..
@@ -10,7 +10,7 @@ GNU_INSTALL_ROOT ?= $(dir $(shell command -v arm-none-eabi-gcc))
 endif
 
 $(OUTPUT_DIRECTORY)/nrf52840_xxaa.out: \
-  LINKER_SCRIPT  := custom_ble_stack_demo_gcc_nrf52.ld
+  LINKER_SCRIPT  := central_demo_gcc_nrf52.ld
 
 # Source files common to all targets
 SRC_FILES += \
@@ -65,9 +65,15 @@ SRC_FILES += \
   $(USB_LOG_DIR)/usb_log.c\
   $(BLE_STACK_DIR)/stack/radio/radio_driver.c\
   $(BLE_STACK_DIR)/stack/core/ble_runtime.c\
-  $(BLE_STACK_DIR)/stack/core/ble_controller.c\
+  $(BLE_STACK_DIR)/stack/core/ble_uuid.c\
+  $(BLE_STACK_DIR)/stack/controller/ble_controller_common.c\
+  $(BLE_STACK_DIR)/stack/controller/ble_controller_central.c\
+  $(BLE_STACK_DIR)/stack/controller/ble_controller_peripheral.c\
   $(BLE_STACK_DIR)/stack/core/ble_stack.c\
-  $(BLE_STACK_DIR)/stack/gatt/ble_gatt_server.c
+  $(BLE_STACK_DIR)/stack/host/gap/ble_gap.c\
+  $(BLE_STACK_DIR)/stack/host/gatt/ble_gatt_api.c\
+  $(BLE_STACK_DIR)/stack/host/gatt/ble_gatt_client.c\
+  $(BLE_STACK_DIR)/stack/host/gatt/ble_gatt_server.c
 
 
 # Include folders common to all targets
@@ -77,8 +83,8 @@ INC_FOLDERS += \
   $(SDK_ROOT)/components/libraries/scheduler \
   $(PROJ_DIR) \
   $(BLE_STACK_DIR)/stack/include \
-  $(BLE_STACK_DIR)/stack/gatt \
   $(BLE_STACK_DIR)/stack/core \
+  $(BLE_STACK_DIR)/stack/controller \
   $(BLE_STACK_DIR)/stack/radio \
   $(SDK_ROOT)/components/libraries/timer \
   $(SDK_ROOT)/components/libraries/fifo \

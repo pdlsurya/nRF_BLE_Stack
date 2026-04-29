@@ -19,17 +19,17 @@ APP_TIMER_DEF(m_measurement_timer_id);
 
 static void counter_char_evt_handler(const ble_gatt_char_evt_t *p_evt);
 static void text_char_evt_handler(const ble_gatt_char_evt_t *p_evt);
-static void ble_evt_handler(const ble_evt_t *p_evt);
+static void gap_evt_handler(const ble_gap_evt_t *p_evt);
+static void gatt_server_evt_handler(const ble_gatt_server_evt_t *p_evt);
 static void ble_state_set(bool connected);
 static void start_advertising(void);
 static void clock_init(void);
 static uint32_t timer_ticks_clamped(uint32_t ms);
-static void timer_stop_if_started(app_timer_id_t timer_id);
 static const char *ble_phy_name(uint8_t phy);
 
 static const char m_dev_name[] = "nRF-BLE-Custom-Stack";
 static uint8_t m_counter_char_value;
-static char m_text_char_value[BLE_GATT_MAX_VALUE_LEN] = "";
+static char m_text_char_value[BLE_ATT_MAX_VALUE_LEN] = "";
 static const uint8_t m_custom_uuid_base[BLE_UUID128_LEN] = {
     0x52U,
     0xD0U,
@@ -150,16 +150,6 @@ static uint32_t timer_ticks_clamped(uint32_t ms)
   return (ticks < APP_TIMER_MIN_TIMEOUT_TICKS) ? APP_TIMER_MIN_TIMEOUT_TICKS : ticks;
 }
 
-static void timer_stop_if_started(app_timer_id_t timer_id)
-{
-  ret_code_t err = app_timer_stop(timer_id);
-
-  if ((err != NRF_SUCCESS) && (err != NRF_ERROR_INVALID_STATE))
-  {
-    APP_ERROR_CHECK(err);
-  }
-}
-
 static const char *ble_phy_name(uint8_t phy)
 {
   switch (phy)
@@ -197,10 +187,8 @@ static void measurement_timer_handler(void *p_context)
   }
 }
 
-static void ble_evt_handler(const ble_evt_t *p_evt)
+static void gap_evt_handler(const ble_gap_evt_t *p_evt)
 {
-  ret_code_t err;
-
   if (p_evt == NULL)
   {
     return;
@@ -214,41 +202,33 @@ static void ble_evt_handler(const ble_evt_t *p_evt)
 
   case BLE_GAP_EVT_CONN_UPDATE_IND:
     log_printf("BLE GAP: connection updated, interval=%d ms latency=%d timeout=%d ms\n",
-               (int)p_evt->params.gap.conn_interval_ms,
-               (int)p_evt->params.gap.slave_latency,
-               (int)p_evt->params.gap.supervision_timeout_ms);
+               (int)p_evt->params.conn_interval_ms,
+               (int)p_evt->params.slave_latency,
+               (int)p_evt->params.supervision_timeout_ms);
     return;
 
   case BLE_GAP_EVT_PHY_UPDATE_IND:
     log_printf("BLE GAP: PHY updated, tx=%s rx=%s\n",
-               ble_phy_name(p_evt->params.gap.tx_phy),
-               ble_phy_name(p_evt->params.gap.rx_phy));
+               ble_phy_name(p_evt->params.tx_phy),
+               ble_phy_name(p_evt->params.rx_phy));
     return;
 
   case BLE_GAP_EVT_TERMINATE_IND:
     log_printf("BLE LINK: terminate indication received\n");
     return;
 
-  case BLE_GATT_EVT_MTU_EXCHANGE:
-    log_printf("BLE ATT: MTU exchange req=%u rsp=%u effective=%u\n",
-               (unsigned int)p_evt->params.gatt.requested_mtu,
-               (unsigned int)p_evt->params.gatt.response_mtu,
-               (unsigned int)p_evt->params.gatt.effective_mtu);
-    return;
-
   case BLE_GAP_EVT_CONNECTED:
     m_counter_char_value = 0U;
     m_custom_characteristics[0].value_len = sizeof(m_counter_char_value);
     ble_state_set(true);
-    err = app_timer_start(m_measurement_timer_id, timer_ticks_clamped(1000U), NULL);
-    APP_ERROR_CHECK(err);
+    APP_ERROR_CHECK(app_timer_start(m_measurement_timer_id, timer_ticks_clamped(1000U), NULL));
     log_printf("BLE GAP: connected, interval=%d ms timeout=%d ms\n",
-               (int)p_evt->params.gap.conn_interval_ms,
-               (int)p_evt->params.gap.supervision_timeout_ms);
+               (int)p_evt->params.conn_interval_ms,
+               (int)p_evt->params.supervision_timeout_ms);
     return;
 
   case BLE_GAP_EVT_DISCONNECTED:
-    timer_stop_if_started(m_measurement_timer_id);
+    APP_ERROR_CHECK(app_timer_stop(m_measurement_timer_id));
     log_printf("BLE GAP: disconnected\n");
     start_advertising();
     return;
@@ -256,6 +236,19 @@ static void ble_evt_handler(const ble_evt_t *p_evt)
   default:
     return;
   }
+}
+
+static void gatt_server_evt_handler(const ble_gatt_server_evt_t *p_evt)
+{
+  if ((p_evt == NULL) || (p_evt->evt_type != BLE_GATT_SERVER_EVT_MTU_EXCHANGE))
+  {
+    return;
+  }
+
+  log_printf("BLE ATT: MTU exchange req=%u rsp=%u effective=%u\n",
+             (unsigned int)p_evt->params.requested_mtu,
+             (unsigned int)p_evt->params.response_mtu,
+             (unsigned int)p_evt->params.effective_mtu);
 }
 
 static void counter_char_evt_handler(const ble_gatt_char_evt_t *p_evt)
@@ -281,7 +274,7 @@ static void counter_char_evt_handler(const ble_gatt_char_evt_t *p_evt)
 
 static void text_char_evt_handler(const ble_gatt_char_evt_t *p_evt)
 {
-  char written_text[BLE_GATT_MAX_VALUE_LEN + 1U];
+  char written_text[BLE_ATT_MAX_VALUE_LEN + 1U];
   uint16_t copy_len;
 
   if ((p_evt == NULL) || (p_evt->evt_type != BLE_GATT_CHAR_EVT_WRITE))
@@ -290,9 +283,9 @@ static void text_char_evt_handler(const ble_gatt_char_evt_t *p_evt)
   }
 
   copy_len = p_evt->p_characteristic->value_len;
-  if (copy_len > BLE_GATT_MAX_VALUE_LEN)
+  if (copy_len > BLE_ATT_MAX_VALUE_LEN)
   {
-    copy_len = BLE_GATT_MAX_VALUE_LEN;
+    copy_len = BLE_ATT_MAX_VALUE_LEN;
   }
 
   if ((copy_len > 0U) && (p_evt->p_characteristic->p_value != NULL))
@@ -306,13 +299,13 @@ static void text_char_evt_handler(const ble_gatt_char_evt_t *p_evt)
 
 int main(void)
 {
-  ret_code_t err;
   bsp_board_init(BSP_INIT_LEDS);
   clock_init();
   log_init();
 
-  ble_stack_init();
-  ble_register_evt_handler(ble_evt_handler);
+  ble_stack_init(BLE_GAP_ROLE_PERIPHERAL);
+  ble_gap_register_evt_handler(gap_evt_handler);
+  ble_gatt_server_register_evt_handler(gatt_server_evt_handler);
   ble_gap_set_device_name(m_dev_name);
   ble_gap_set_conn_params(&m_gap_conn_params);
   ble_uuid_set_vendor_base(m_custom_uuid_base);
@@ -320,10 +313,9 @@ int main(void)
   APP_ERROR_CHECK_BOOL(ble_gatt_server_init(m_custom_services,
                                             (uint8_t)(sizeof(m_custom_services) / sizeof(m_custom_services[0]))));
 
-  err = app_timer_create(&m_measurement_timer_id,
-                         APP_TIMER_MODE_REPEATED,
-                         measurement_timer_handler);
-  APP_ERROR_CHECK(err);
+  APP_ERROR_CHECK(app_timer_create(&m_measurement_timer_id,
+                                   APP_TIMER_MODE_REPEATED,
+                                   measurement_timer_handler));
 
   start_advertising();
 

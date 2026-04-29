@@ -178,18 +178,15 @@ void log_init(void)
 
   app_usbd_serial_num_generate();
 
-  ret = app_usbd_init(&usbd_config);
-  APP_ERROR_CHECK(ret);
+  APP_ERROR_CHECK(app_usbd_init(&usbd_config));
 
   app_usbd_class_inst_t const *class_cdc_acm = app_usbd_cdc_acm_class_inst_get(
       &m_app_cdc_acm);
-  ret = app_usbd_class_append(class_cdc_acm);
-  APP_ERROR_CHECK(ret);
+  APP_ERROR_CHECK(app_usbd_class_append(class_cdc_acm));
 
   if (USBD_POWER_DETECTION)
   {
-    ret = app_usbd_power_events_enable();
-    APP_ERROR_CHECK(ret);
+    APP_ERROR_CHECK(app_usbd_power_events_enable());
   }
   else
   {

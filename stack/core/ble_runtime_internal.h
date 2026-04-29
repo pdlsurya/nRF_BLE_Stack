@@ -1,7 +1,7 @@
 /**
- * @file ble_internal.h
+ * @file ble_runtime_internal.h
  * @author Surya Poudel
- * @brief Internal definitions and shared runtime state for nRF BLE stack
+ * @brief Internal runtime state and shared cross-layer definitions for nRF BLE stack
  * @version 0.1
  * @date 2026-03-27
  *
@@ -9,18 +9,17 @@
  *
  */
 
-#ifndef BLE_INTERNAL_H__
-#define BLE_INTERNAL_H__
+#ifndef BLE_RUNTIME_INTERNAL_H__
+#define BLE_RUNTIME_INTERNAL_H__
 
 #include <stdbool.h>
 #include <stdint.h>
 
 #include "app_timer.h"
+#include "ble_ll_types.h"
 #include "nrf_ble.h"
 #include "radio_driver.h"
 
-#define BLE_MAX_ADV_DATA_LEN 31U
-#define BLE_ADV_ADVERTISER_ADDRESS_LEN 6U
 #define BLE_GAP_DEVICE_NAME_MAX_LEN 20U
 #define BLE_IDENTITY_SALT 0x434D535456324C39ULL
 #define BLE_L2CAP_CID_ATT 0x0004U
@@ -38,6 +37,9 @@
 #define BLE_EVT_IRQ_PRIORITY 6U
 #define BLE_EVT_QUEUE_SIZE 16U
 #define BLE_CONN_PARAM_UPDATE_DELAY_MS 6000U
+#define BLE_INITIATOR_WIN_OFFSET_UNITS 6U
+#define BLE_INITIATOR_WIN_SIZE_UNITS 2U
+#define BLE_INITIATOR_HOP_INCREMENT 5U
 #define BLE_LL_DATA_LEN_DEFAULT_OCTETS 27U
 #define BLE_LL_DATA_LEN_MAX_OCTETS 251U
 #define BLE_LL_DATA_LEN_DEFAULT_TIME 328U
@@ -79,100 +81,6 @@ static inline void irq_unlock(uint32_t primask)
         __enable_irq();
     }
 }
-
-typedef enum
-{
-    LL_ADV_IND = 0x00,
-    LL_ADV_SCAN_IND = 0x06,
-    LL_SCAN_REQ = 0x03,
-    LL_SCAN_RSP = 0x04,
-    LL_CONNECT_REQ = 0x05
-} ble_adv_pdu_type_t;
-
-typedef enum
-{
-    BLE_LLID_CONTINUATION = 0x01,
-    BLE_LLID_START_L2CAP = 0x02,
-    BLE_LLID_CONTROL_PDU = 0x03
-} ble_llid_t;
-
-typedef struct
-{
-    uint8_t pdu_type : 4;
-    uint8_t rfu : 2;
-    uint8_t txadd : 1;
-    uint8_t rxadd : 1;
-} __attribute__((packed)) ble_ll_adv_header_t;
-
-typedef struct
-{
-    ble_ll_adv_header_t header;
-    uint8_t payload_length;
-    uint8_t mac_address[6];
-    uint8_t payload[128];
-} __attribute__((packed)) ble_ll_adv_pdu_t;
-
-typedef struct
-{
-    ble_ll_adv_header_t header;
-    uint8_t payload_length;
-    uint8_t scanner_address[6];
-    uint8_t advertiser_address[6];
-} __attribute__((packed)) ble_scan_req_pdu_t;
-
-typedef struct
-{
-    ble_ll_adv_header_t header;
-    uint8_t payload_length;
-    uint8_t advertiser_address[6];
-    uint8_t payload[BLE_MAX_ADV_DATA_LEN];
-} __attribute__((packed)) ble_scan_rsp_pdu_t;
-
-typedef struct
-{
-    uint8_t access_address[4];
-    uint8_t crc_init[3];
-    uint8_t win_size;
-    uint16_t win_offset;
-    uint16_t interval;
-    uint16_t latency;
-    uint16_t timeout;
-    uint8_t channel_map[5];
-    uint8_t hop_increment : 5;
-    uint8_t sca : 3;
-} __attribute__((packed)) ble_ll_connect_ind_t;
-
-typedef struct
-{
-    ble_ll_adv_header_t header;
-    uint8_t payload_length;
-    uint8_t initiator_address[6];
-    uint8_t advertiser_address[6];
-    ble_ll_connect_ind_t ll_data;
-} __attribute__((packed)) ble_connect_req_pdu_t;
-
-typedef union
-{
-    ble_ll_adv_pdu_t adv;
-    ble_scan_req_pdu_t scan_req;
-    ble_connect_req_pdu_t connect_req;
-} ble_adv_rx_pdu_t;
-
-typedef struct
-{
-    uint8_t llid : 2;
-    uint8_t nesn : 1;
-    uint8_t sn : 1;
-    uint8_t md : 1;
-    uint8_t rfu : 3;
-} __attribute__((packed)) ble_ll_data_header_t;
-
-typedef struct
-{
-    ble_ll_data_header_t header;
-    uint8_t length;
-    uint8_t payload[251];
-} __attribute__((packed)) ble_ll_data_raw_pdu_t;
 
 typedef struct
 {
@@ -238,7 +146,9 @@ typedef struct
 
 typedef struct
 {
+    ble_gap_role_t role;
     bool connected;
+    ble_gap_addr_t peer_addr;
     ble_link_conn_state_t conn;
     ble_link_channel_state_t channel;
     ble_link_packet_state_t packet;
@@ -252,10 +162,12 @@ typedef struct
 
 typedef struct
 {
+    ble_gap_role_t configured_role;
     char gap_device_name[BLE_GAP_DEVICE_NAME_MAX_LEN + 1U];
     uint8_t flags;
     int8_t tx_power;
     uint16_t adv_interval_ms;
+    ble_scan_config_t scan_config;
     ble_gap_adv_name_type_t adv_name_type;
     uint8_t adv_short_name_length;
     ble_uuid_t included_service_uuid;
@@ -276,6 +188,13 @@ typedef enum
 
 typedef enum
 {
+    BLE_SCAN_RADIO_PHASE_IDLE = 0,
+    BLE_SCAN_RADIO_PHASE_WAIT_RX_DISABLED,
+    BLE_SCAN_RADIO_PHASE_WAIT_CONNECT_TX_DISABLED,
+} ble_scan_radio_phase_t;
+
+typedef enum
+{
     BLE_CONN_RADIO_PHASE_IDLE = 0,
     BLE_CONN_RADIO_PHASE_WAIT_RX_DISABLED,
     BLE_CONN_RADIO_PHASE_WAIT_TX_DISABLED,
@@ -293,18 +212,28 @@ typedef struct
     ble_ll_adv_pdu_t adv_tx_pdu;
     ble_scan_rsp_pdu_t scan_rsp_pdu;
     ble_adv_rx_pdu_t adv_rx_pdu;
+    ble_adv_rx_pdu_t scan_rx_pdu;
+    ble_connect_req_pdu_t connect_req_pdu;
     ble_ll_data_raw_pdu_t conn_rx_pdu;
     ble_ll_data_raw_pdu_t conn_tx_pdu;
     ble_ll_data_raw_pdu_t last_conn_tx_pdu;
     ble_ll_data_raw_pdu_t pending_conn_tx_pdu;
     uint8_t adv_address[6];
     uint8_t adv_txadd;
+    uint8_t scan_channel_index;
+    bool scanning;
+    bool scan_connect_pending;
+    bool connect_filter_enabled;
+    ble_gap_scan_filter_t connect_filter;
+    bool connect_target_valid;
+    ble_gap_addr_t connect_target;
     bool adv_scan_rsp_pending;
     bool adv_connect_pending;
     bool tx_unacked;
     bool has_pending_conn_tx_pdu;
     bool conn_rx_process_pending;
     ble_adv_radio_phase_t adv_radio_phase;
+    ble_scan_radio_phase_t scan_radio_phase;
     ble_conn_radio_phase_t conn_radio_phase;
     ble_conn_bcmatch_state_t conn_bcmatch;
     uint32_t conn_next_event_tick_us;
@@ -313,8 +242,10 @@ typedef struct
 typedef enum
 {
     BLE_DEFERRED_EVT_KIND_GAP = 0,
-    BLE_DEFERRED_EVT_KIND_GATT,
+    BLE_DEFERRED_EVT_KIND_GATT_SERVER,
     BLE_DEFERRED_EVT_KIND_GATT_CHARACTERISTIC,
+    BLE_DEFERRED_EVT_KIND_SCAN_REPORT,
+    BLE_DEFERRED_EVT_KIND_GATT_CLIENT,
 } ble_deferred_evt_kind_t;
 
 typedef struct
@@ -322,12 +253,15 @@ typedef struct
     ble_deferred_evt_kind_t kind;
     union
     {
-        ble_evt_t stack_evt;
+        ble_gap_evt_t gap_evt;
+        ble_gatt_server_evt_t gatt_server_evt;
+        ble_gap_scan_report_t scan_report;
         struct
         {
             ble_gatt_char_evt_type_t evt_type;
             ble_gatt_characteristic_t *p_characteristic;
         } gatt_characteristic;
+        ble_gatt_client_evt_t gatt_client;
     } params;
 } ble_deferred_evt_t;
 
@@ -346,15 +280,25 @@ extern const uint32_t m_ble_crc_poly;
 extern const uint32_t m_adv_crc_init;
 extern ble_host_t m_host;
 extern ble_link_t m_link;
-extern ble_evt_handler_t m_evt_handler;
+extern ble_gap_evt_handler_t m_gap_evt_handler;
+extern ble_gap_scan_report_handler_t m_scan_report_handler;
+extern ble_gatt_server_evt_handler_t m_gatt_server_evt_handler;
+extern ble_gatt_client_evt_handler_t m_gatt_client_evt_handler;
 extern ble_ctrl_runtime_t m_ctrl_rt;
+
+static inline bool ble_host_role_is_configured(ble_gap_role_t role)
+{
+    return m_host.configured_role == role;
+}
 
 uint16_t u16_decode(const uint8_t *p_src);
 void u16_encode(uint16_t value, uint8_t *p_dst);
 void ble_evt_dispatch_init(void);
-bool ble_evt_notify_gap(ble_evt_type_t evt_type);
+bool ble_evt_notify_gap(ble_gap_evt_type_t evt_type);
+bool ble_evt_notify_scan_report(const ble_gap_scan_report_t *p_report);
 bool ble_evt_notify_gatt_characteristic(ble_gatt_char_evt_type_t evt_type, ble_gatt_characteristic_t *p_characteristic);
-bool ble_evt_notify_gatt_mtu_exchange(uint16_t requested_mtu, uint16_t response_mtu, uint16_t effective_mtu);
+bool ble_evt_notify_gatt_server_mtu_exchange(uint16_t requested_mtu, uint16_t response_mtu, uint16_t effective_mtu);
+bool ble_evt_notify_gatt_client(const ble_gatt_client_evt_t *p_evt);
 bool ble_uuid_is_valid(const ble_uuid_t *p_uuid);
 uint16_t ble_uuid_encoded_len(const ble_uuid_t *p_uuid);
 bool ble_uuid_encode(const ble_uuid_t *p_uuid, uint8_t *p_dst);
@@ -366,6 +310,13 @@ void controller_load_identity_address(void);
 
 void controller_runtime_init(void);
 bool controller_queue_l2cap_payload(uint16_t cid, const uint8_t *p_payload, uint16_t payload_len);
+void controller_start_advertising_internal(void);
+void controller_stop_scanning_internal(void);
+void controller_start_scanning_internal(void);
+bool controller_start_connecting(void);
 void controller_disconnect_internal(void);
+void ble_gatt_client_init(void);
+void ble_gatt_client_reset_connection_state(void);
+uint16_t ble_gatt_client_process_pdu(const uint8_t *p_att, uint16_t att_len, uint8_t *p_rsp, uint16_t rsp_max_len);
 
-#endif
+#endif /* BLE_RUNTIME_INTERNAL_H__ */

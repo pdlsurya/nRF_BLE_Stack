@@ -1,13 +1,14 @@
-# nRF_BLE_Stack
+# nrf-ble-stack
 
-Minimal BLE peripheral stack for nRF SoCs.
+Minimal BLE stack for nRF SoCs.
 
 This repository contains a compact educational BLE stack focused on clarity,
 small code size, and readable control flow. It implements the pieces needed for
-an application-defined BLE peripheral: advertising, scan-response handling for
-active scanners, connection handling, ATT/GATT services and characteristics,
-deferred application callbacks, passive data length extension, and delayed
-connection parameter update requests.
+an application-defined BLE peripheral or central: advertising, passive
+scanning, central connection initiation, connection handling, ATT/GATT
+services and characteristics, GATT client procedures, deferred application
+callbacks, passive data length extension, and delayed connection parameter
+update requests.
 
 The stack is intentionally small enough to read end to end. Public API,
 controller logic, ATT/GATT handling, and radio access are kept in separate
@@ -15,15 +16,18 @@ layers so packet flow is easy to follow in code.
 
 ## Current Scope
 
-- Peripheral role only
-- Advertising with configurable full-name or short-name format, flags, TX power, interval, and one
+- Peripheral and central role support
+- One role active at a time
+- Advertising with configurable name, flags, TX power, interval, and one
   included service UUID
+- Passive scanning with scan report callbacks and optional auto-connect filter
 - Minimal legacy `SCAN_RSP` support for active scanners that send `SCAN_REQ`
   before showing or connecting
 - Standard 16-bit SIG UUIDs and vendor UUIDs expanded from one registered
   128-bit base UUID
 - Runtime registration of custom GATT services and characteristics
-- GATT write and notify/indicate-state callbacks
+- GATT client procedures for MTU exchange, discovery, read, write, and CCCD updates
+- GATT write and notification-state callbacks
 - Deferred BLE events through low-priority software interrupt
 - Passive data length extension support
 - Passive LE 2M PHY update support
@@ -36,24 +40,34 @@ layers so packet flow is easy to follow in code.
   `TIMER0` plus fixed PPI capture for better interoperability with active
   central implementations
 - One RX and one TX exchange per connection interval
-- Single pending connected TX slot shared by notifications, indications, ATT responses, and
+- Single pending connected TX slot shared by notifications, ATT responses, and
   signaling PDUs
 
 ## Repository Layout
 
 - `stack/include/nrf_ble.h`
   Public BLE stack API
-- `stack/gatt/ble_gatt_server.h`
-  Public GATT and UUID types
+- `stack/include/ble_gatt_server.h`
+  Public GATT server types and APIs
+- `stack/include/ble_gatt_client.h`
+  Public GATT client types and APIs
 - `stack/core/`
-  Stack entry points, runtime state, controller flow, UUID helpers, and
+  Stack entry points, runtime state, UUID helpers, and
   deferred event delivery
-- `stack/gatt/`
-  ATT/GATT database construction and ATT request handling
+- `stack/controller/`
+  Shared, central, and peripheral controller/link-layer implementation
+- `stack/include/ble_att_defs.h`
+  Shared ATT protocol definitions
+- `stack/host/gap/`
+  GAP-facing host APIs
+- `stack/host/gatt/`
+  GATT client/server implementation and public GATT helpers
 - `stack/radio/`
   nRF radio peripheral abstraction used by the controller
-- `examples/custom_ble_stack_demo/`
+- `examples/peripheral_demo/`
   Example peripheral application using the stack
+- `examples/central_demo/`
+  Minimal central application that scans, connects, discovers, and subscribes
 - `external/nrf5-sdk/`
   nRF5 SDK Git submodule used by the example build
 - `README.md`
@@ -64,38 +78,39 @@ layers so packet flow is easy to follow in code.
 Main application-facing entry points:
 
 - `ble_stack_init()`
-- `ble_register_evt_handler()`
+- `ble_gap_register_evt_handler()`
 - `ble_adv_init()`
 - `ble_gap_set_device_name()`
 - `ble_gap_set_conn_params()`
 - `ble_gap_update_conn_params()`
 - `ble_uuid_set_vendor_base()`
 - `ble_gatt_server_init()`
+- `ble_gatt_server_register_evt_handler()`
+- `ble_gatt_client_register_evt_handler()`
 - `ble_start_advertising()`
 - `ble_notify_characteristic()`
-- `ble_indicate_characteristic()`
 - `ble_is_connected()`
 
 See [nrf_ble.h](stack/include/nrf_ble.h) and
-[ble_gatt_server.h](stack/gatt/ble_gatt_server.h) for the full public
+[ble_gatt_server.h](stack/include/ble_gatt_server.h) for the full public
 interface.
 
 ## Architecture At A Glance
 
 - `ble_stack.c`
   Public API wrapper layer. Stores host configuration, UUID base, delayed
-  connection parameter update timer, and characteristic value update helpers.
+  connection parameter update timer, and notification helpers.
 - `ble_runtime.c`
   Shared runtime state, small utilities, identity address generation, and
   deferred event delivery through `SWI1_EGU1`.
-- `ble_controller.c`
-  Advertising, scan-request/connect-request validation and handling,
-  connection-event timing, LL control, retransmission behavior, DLE parameter
-  tracking, and ATT/L2CAP packet transport.
+- `ble_controller_common.c`, `ble_controller_central.c`, and `ble_controller_peripheral.c`
+  Shared, central, and peripheral controller flow including advertising,
+  scanning, connection-event timing, LL control, retransmission behavior, DLE
+  parameter tracking, and ATT/L2CAP packet transport.
 - `ble_gatt_server.c`
   ATT database construction, 16-bit and vendor-base UUID expansion for
   discovery responses, ATT request handling, CCCD tracking, MTU negotiation,
-  and notification/indication building.
+  and notification building.
 - `radio_driver.c`
   Direct `NRF_RADIO` access hidden behind a small abstraction.
 
@@ -112,34 +127,34 @@ interface.
 
 ## Event Model
 
-- Stack-level BLE events are delivered through one callback registered with
-  `ble_register_evt_handler()`.
-- `ble_evt_t` groups event payloads under `params.gap` and `params.gatt`.
-- Current stack-level events are:
+- GAP events are delivered through one callback registered with
+  `ble_gap_register_evt_handler()`.
+- Current GAP events are:
   - `BLE_GAP_EVT_CONNECTED`
   - `BLE_GAP_EVT_DISCONNECTED`
   - `BLE_GAP_EVT_SUPERVISION_TIMEOUT`
   - `BLE_GAP_EVT_CONN_UPDATE_IND`
   - `BLE_GAP_EVT_PHY_UPDATE_IND`
   - `BLE_GAP_EVT_TERMINATE_IND`
-  - `BLE_GATT_EVT_MTU_EXCHANGE`
 - GAP events also expose the current `tx_phy` and `rx_phy` so applications can
   log or react when a PHY update takes effect.
+- GATT server events are delivered through `ble_gatt_server_register_evt_handler()`.
+- The current GATT server event is `BLE_GATT_SERVER_EVT_MTU_EXCHANGE`.
+- GATT client procedure events are delivered through
+  `ble_gatt_client_register_evt_handler()`.
 - Characteristic-specific events are delivered through each characteristic's
   `evt_handler`.
 - `ble_gatt_char_evt_t` carries the event type plus `p_characteristic`. For
   write events, applications read the current value from
   `p_evt->p_characteristic->p_value` and `p_evt->p_characteristic->value_len`.
-- CCCD state-change events expose `notifications_enabled` and
-  `indications_enabled` so applications can react to client configuration.
 - Both stack-level and characteristic-level callbacks are deferred to
   low-priority software interrupt context instead of being called directly from
   the radio ISR path.
 
 ## Example
 
-The repository includes a working example application in
-`examples/custom_ble_stack_demo`.
+The repository includes working example applications in
+`examples/peripheral_demo` and `examples/central_demo`.
 
 Before building the example, initialize the SDK submodule:
 
@@ -147,10 +162,16 @@ Before building the example, initialize the SDK submodule:
 git submodule update --init --recursive
 ```
 
-Build the example with:
+Build the peripheral example with:
 
 ```sh
-make -C examples/custom_ble_stack_demo -j4
+make -C examples/peripheral_demo -j4
+```
+
+Build the central example with:
+
+```sh
+make -C examples/central_demo -j4
 ```
 
 Notes:
@@ -172,18 +193,15 @@ static const uint8_t custom_uuid_base[BLE_UUID128_LEN] = {
     0xA6, 0x8F, 0x4E, 0x7A, 0x00, 0x00, 0x00, 0x00,
 };
 
-static void ble_evt_handler(const ble_evt_t *p_evt)
+static void gap_evt_handler(const ble_gap_evt_t *p_evt)
 {
     switch (p_evt->evt_type)
     {
     case BLE_GAP_EVT_CONNECTED:
-        (void)p_evt->params.gap.conn_interval_ms;
+        (void)p_evt->params.conn_interval_ms;
         break;
     case BLE_GAP_EVT_CONN_UPDATE_IND:
-        (void)p_evt->params.gap.slave_latency;
-        break;
-    case BLE_GATT_EVT_MTU_EXCHANGE:
-        (void)p_evt->params.gatt.effective_mtu;
+        (void)p_evt->params.slave_latency;
         break;
     case BLE_GAP_EVT_DISCONNECTED:
         ble_start_advertising();
@@ -193,10 +211,19 @@ static void ble_evt_handler(const ble_evt_t *p_evt)
     }
 }
 
+static void gatt_server_evt_handler(const ble_gatt_server_evt_t *p_evt)
+{
+    if (p_evt->evt_type == BLE_GATT_SERVER_EVT_MTU_EXCHANGE)
+    {
+        (void)p_evt->params.effective_mtu;
+    }
+}
+
 int main(void)
 {
-    ble_stack_init();
-    ble_register_evt_handler(ble_evt_handler);
+    ble_stack_init(BLE_GAP_ROLE_PERIPHERAL);
+    ble_gap_register_evt_handler(gap_evt_handler);
+    ble_gatt_server_register_evt_handler(gatt_server_evt_handler);
     ble_gap_set_device_name("nrf-ble");
     ble_gap_set_conn_params(&(ble_gap_conn_params_t){
         .min_conn_interval_1p25ms = MS_TO_1P25MS_UNITS(30U),
@@ -251,7 +278,7 @@ The normal peripheral flow is:
 13. About six seconds after connect, the stack sends an L2CAP Connection
     Parameter Update Request if preferred parameters were configured.
 14. Each connection interval is handled as one RX and one TX exchange. Any ATT
-    response, notification, indication, or signaling PDU generated from the received packet
+    response, notification, or signaling PDU generated from the received packet
     is queued for the next connection event.
 15. Stack-level BLE events and characteristic callbacks are delivered later
     from `SWI1_EGU1_IRQHandler()`.
@@ -260,11 +287,12 @@ The normal peripheral flow is:
 
 - Services and characteristics are provided by the application instead of being
   hardcoded in the stack.
-- BLE stack events are delivered through a unified `ble_evt_t`.
+- GAP, GATT server, GATT client, and characteristic events are delivered
+  through separate callback registrations.
 - GATT characteristic events remain per-characteristic callbacks.
 - Characteristic values and current lengths live directly in
   `ble_gatt_characteristic_t`.
-- `ble_controller.c` owns BLE packet flow, timing, and LL control handling.
+- The controller files own BLE packet flow, timing, and LL control handling.
 - The controller only accepts legacy `SCAN_REQ` and `CONNECT_REQ` packets whose
   advertiser address and `RxAdd` bit match the current advertising identity.
 - Scan responses are intentionally minimal so the advertising RX->TX turnaround
@@ -282,7 +310,8 @@ The normal peripheral flow is:
 
 ## Limitations
 
-- No central role or scanning support
+- No simultaneous multi-role support; the stack runs as either peripheral or
+  central at one time
 - `TIMER0` is reserved by the controller for connection timing and radio-anchor
   capture
 - No L2CAP fragmentation or reassembly
