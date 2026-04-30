@@ -7,8 +7,9 @@ small code size, and readable control flow. It implements the pieces needed for
 an application-defined BLE peripheral or central: advertising, passive
 scanning, central connection initiation, connection handling, ATT/GATT
 services and characteristics, GATT client procedures, deferred application
-callbacks, passive data length extension, and delayed connection parameter
-update requests.
+callbacks, automatic central link-layer feature exchange, automatic central
+data length and PHY updates, and application-driven MTU and connection
+parameter procedures.
 
 The stack is intentionally small enough to read end to end. Public API,
 controller logic, ATT/GATT handling, and radio access are kept in separate
@@ -29,13 +30,14 @@ layers so packet flow is easy to follow in code.
 - GATT client procedures for MTU exchange, discovery, read, write, and CCCD updates
 - GATT write and notification-state callbacks
 - Deferred BLE events through low-priority software interrupt
-- Passive data length extension support
-- Passive LE 2M PHY update support
-- ATT MTU negotiation up to 247 bytes when the peer performs the LL length
-  procedure
+- Automatic central feature exchange after connect
+- Automatic central data length update after connect
+- Automatic central LE 1M/2M PHY update after connect
+- ATT MTU negotiation up to 247 bytes
 - Legacy advertising validation of both `SCAN_REQ` and `CONNECT_REQ` against
   the local advertiser address and address type
-- Internal delayed connection parameter update request after connect
+- Application-driven peripheral connection parameter update requests and
+  central connection update indications
 - Connection-event timing re-anchored from the central packet address using
   `TIMER0` plus fixed PPI capture for better interoperability with active
   central implementations
@@ -67,7 +69,9 @@ layers so packet flow is easy to follow in code.
 - `examples/peripheral_demo/`
   Example peripheral application using the stack
 - `examples/central_demo/`
-  Minimal central application that scans, connects, discovers, and subscribes
+  Minimal central application that scans, connects, starts GATT discovery on
+  `BLE_GAP_EVT_CONNECTED`, and subscribes while the stack performs automatic
+  central LL setup in the background
 - `external/nrf5-sdk/`
   nRF5 SDK Git submodule used by the example build
 - `README.md`
@@ -82,7 +86,8 @@ Main application-facing entry points:
 - `ble_adv_init()`
 - `ble_gap_set_device_name()`
 - `ble_gap_set_conn_params()`
-- `ble_gap_update_conn_params()`
+- `ble_gap_request_conn_params_update()`
+- `ble_gap_initiate_conn_update()`
 - `ble_uuid_set_vendor_base()`
 - `ble_gatt_server_init()`
 - `ble_gatt_server_register_evt_handler()`
@@ -98,8 +103,8 @@ interface.
 ## Architecture At A Glance
 
 - `ble_stack.c`
-  Public API wrapper layer. Stores host configuration, UUID base, delayed
-  connection parameter update timer, and notification helpers.
+  Public API wrapper layer. Stores host configuration, UUID base, and
+  notification helpers.
 - `ble_runtime.c`
   Shared runtime state, small utilities, identity address generation, and
   deferred event delivery through `SWI1_EGU1`.
@@ -136,6 +141,9 @@ interface.
   - `BLE_GAP_EVT_CONN_UPDATE_IND`
   - `BLE_GAP_EVT_PHY_UPDATE_IND`
   - `BLE_GAP_EVT_TERMINATE_IND`
+  - `BLE_GAP_EVT_FEATURE_EXCHANGED`
+  - `BLE_GAP_EVT_DATA_LENGTH_UPDATED`
+  - `BLE_GAP_EVT_CONTROL_PROCEDURE_UNSUPPORTED`
 - GAP events also expose the current `tx_phy` and `rx_phy` so applications can
   log or react when a PHY update takes effect.
 - GATT server events are delivered through `ble_gatt_server_register_evt_handler()`.
@@ -245,10 +253,10 @@ int main(void)
 
 ## Runtime Flow Summary
 
-The normal peripheral flow is:
+The normal stack flow is:
 
 1. `ble_stack_init()` brings up shared state, deferred events, controller
-   runtime, and the delayed connection parameter update timer.
+   runtime, and GATT client state.
 2. `ble_gap_set_device_name()` stores the local name used by both advertising
    and the GAP Device Name attribute.
 3. `ble_gap_set_conn_params()` stores preferred connection parameters that can
@@ -269,18 +277,21 @@ The normal peripheral flow is:
     type is received, the controller switches to connected mode, starts
     connection-event timing with `TIMER0`, and begins using the data channel
     map from the request.
-11. If the peer performs the LL length procedure, the controller updates the
-   usable LL payload size and ATT MTU negotiation can grow up to 247 bytes.
-12. If the peer performs the LL PHY procedure, the controller advertises
-    `1M | 2M` support, schedules the selected PHYs for the requested instant,
-    and applies the RX/TX PHY change at the start of the matching connection
-    event.
-13. About six seconds after connect, the stack sends an L2CAP Connection
-    Parameter Update Request if preferred parameters were configured.
-14. Each connection interval is handled as one RX and one TX exchange. Any ATT
+11. When the stack is acting as the central, it automatically sequences LL
+    feature exchange, data length update, and a `1M | 2M` PHY request as soon
+    as the link is established.
+12. If the peer performs the LL length or LL PHY procedures on its own, the
+    controller still updates the negotiated packet length or scheduled PHY
+    state and reports the resulting GAP events.
+13. ATT MTU exchange and connection parameter updates remain application
+    driven through the public GATT and GAP APIs.
+14. Applications can start GATT discovery immediately after
+    `BLE_GAP_EVT_CONNECTED` when acting as the central; the controller keeps
+    automatic central LL control traffic ahead of queued ATT/L2CAP payloads.
+15. Each connection interval is handled as one RX and one TX exchange. Any ATT
     response, notification, or signaling PDU generated from the received packet
     is queued for the next connection event.
-15. Stack-level BLE events and characteristic callbacks are delivered later
+16. Stack-level BLE events and characteristic callbacks are delivered later
     from `SWI1_EGU1_IRQHandler()`.
 
 ## Design Notes
@@ -317,12 +328,9 @@ The normal peripheral flow is:
 - No L2CAP fragmentation or reassembly
 - No security, pairing, or bonding
 - No long writes or prepare/execute write support
-- Data length extension is passive only; the stack responds to the peer's LL
-  length procedure but does not initiate it
-- PHY update is passive only; the stack responds to the peer's LL PHY
-  procedure but does not initiate it
-- The delayed connection parameter update request is one-shot and uses the same
-  single pending TX slot as other outgoing connected traffic
+- Central-side automatic feature exchange, data length update, and PHY update
+  are serialized ahead of queued ATT/L2CAP traffic because the controller
+  keeps one pending slot per traffic class
 
 ## License
 

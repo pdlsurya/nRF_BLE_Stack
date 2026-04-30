@@ -54,6 +54,5 @@ void ble_stack_init(ble_gap_role_t role)
 
     ble_evt_dispatch_init();
     controller_runtime_init();
-    ble_conn_param_update_timer_init();
     ble_gatt_client_init();
 }

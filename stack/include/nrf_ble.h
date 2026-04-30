@@ -80,6 +80,15 @@ typedef struct
     uint16_t supervision_timeout_10ms;
 } ble_gap_conn_params_t;
 
+typedef enum
+{
+    BLE_GAP_CTRL_PROC_NONE = 0,
+    BLE_GAP_CTRL_PROC_FEATURE_EXCHANGE,
+    BLE_GAP_CTRL_PROC_DATA_LENGTH_UPDATE,
+    BLE_GAP_CTRL_PROC_PHY_UPDATE,
+    BLE_GAP_CTRL_PROC_CONN_UPDATE,
+} ble_gap_ctrl_procedure_t;
+
 typedef struct
 {
     uint16_t interval_ms;
@@ -117,6 +126,9 @@ typedef enum
     BLE_GAP_EVT_CONN_UPDATE_IND,
     BLE_GAP_EVT_PHY_UPDATE_IND,
     BLE_GAP_EVT_TERMINATE_IND,
+    BLE_GAP_EVT_FEATURE_EXCHANGED,
+    BLE_GAP_EVT_DATA_LENGTH_UPDATED,
+    BLE_GAP_EVT_CONTROL_PROCEDURE_UNSUPPORTED,
 } ble_gap_evt_type_t;
 
 typedef struct
@@ -126,8 +138,15 @@ typedef struct
     uint16_t supervision_timeout_ms;
     uint8_t tx_phy;
     uint8_t rx_phy;
+    uint16_t max_tx_octets;
+    uint16_t max_rx_octets;
+    uint16_t max_tx_time_us;
+    uint16_t max_rx_time_us;
     ble_gap_role_t role;
     ble_gap_addr_t peer_addr;
+    uint8_t features[8];
+    ble_gap_ctrl_procedure_t procedure;
+    uint8_t unsupported_opcode;
 } ble_gap_evt_params_t;
 
 typedef struct
@@ -152,7 +171,8 @@ void ble_stop_scanning(void);
 void ble_gap_set_device_name(const char *p_name);
 void ble_gap_set_conn_params(const ble_gap_conn_params_t *p_params);
 bool ble_gap_connect(const ble_gap_addr_t *p_peer_addr);
-bool ble_gap_update_conn_params(void);
+bool ble_gap_request_conn_params_update(void);
+bool ble_gap_initiate_conn_update(const ble_gap_conn_params_t *p_params);
 void ble_uuid_set_vendor_base(const uint8_t uuid128[BLE_UUID128_LEN]);
 bool ble_is_connected(void);
 bool ble_notify_characteristic(const ble_gatt_characteristic_t *p_characteristic);

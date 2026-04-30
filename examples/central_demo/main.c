@@ -1,4 +1,3 @@
-#include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -17,8 +16,6 @@
 #define BLE_CONNECTED_LED_IDX BSP_BOARD_LED_0
 #endif
 
-#define LOG_ENTRY_MAX_CHARS 40U
-#define LOG_FMT_BUFFER_CHARS 192U
 #define UUID_STR_CHARS 40U
 #define GATT_DISCOVERY_MAX_CHARACTERISTICS 8U
 #define BLE_UUID_CCCD 0x2902U
@@ -53,7 +50,6 @@ static bool gatt_discovery_start_characteristics(void);
 static bool gatt_discovery_start_descriptors(void);
 static bool gatt_subscription_enable_notifications(void);
 static void start_target_scan(void);
-static void log_shortf(const char *format, ...);
 
 static const uint8_t m_custom_uuid_base[BLE_UUID128_LEN] = {
     0x52U,
@@ -190,46 +186,6 @@ static void gatt_client_uuid_format(const ble_uuid_t *p_uuid, char *p_buffer, si
     (void)snprintf(p_buffer, buffer_size, "type=%u", (unsigned int)p_uuid->type);
 }
 
-static void log_shortf(const char *format, ...)
-{
-    char buffer[LOG_FMT_BUFFER_CHARS];
-    va_list args;
-    size_t len;
-    size_t offset = 0U;
-
-    if (format == NULL)
-    {
-        return;
-    }
-
-    va_start(args, format);
-    (void)vsnprintf(buffer, sizeof(buffer), format, args);
-    va_end(args);
-
-    len = strlen(buffer);
-    while ((len > 0U) && ((buffer[len - 1U] == '\n') || (buffer[len - 1U] == '\r')))
-    {
-        buffer[len - 1U] = '\0';
-        len--;
-    }
-
-    while (offset < len)
-    {
-        char chunk[LOG_ENTRY_MAX_CHARS + 1U];
-        size_t chunk_len = len - offset;
-
-        if (chunk_len > LOG_ENTRY_MAX_CHARS)
-        {
-            chunk_len = LOG_ENTRY_MAX_CHARS;
-        }
-
-        (void)memcpy(chunk, &buffer[offset], chunk_len);
-        chunk[chunk_len] = '\0';
-        log_printf("%s\n", chunk);
-        offset += chunk_len;
-    }
-}
-
 static void demo_vendor_uuid_build(uint16_t short_uuid, uint8_t uuid128[BLE_UUID128_LEN])
 {
     (void)memcpy(uuid128, m_custom_uuid_base, BLE_UUID128_LEN);
@@ -309,31 +265,31 @@ static void gatt_discovery_start(void)
 
     if (ble_gatt_client_discover_primary_services_by_uuid(&m_target_service_uuid))
     {
-        log_shortf("BLE GATTC svc discover start");
-        log_shortf("svc uuid=%s", uuid_str);
+        log_printf("BLE GATTC svc discover start\n");
+        log_printf("svc uuid=%s\n", uuid_str);
         return;
     }
 
-    log_shortf("BLE GATTC svc discover failed");
+    log_printf("BLE GATTC svc discover failed\n");
 }
 
 static bool gatt_discovery_start_characteristics(void)
 {
     if (!m_gatt_demo.service_found)
     {
-        log_shortf("BLE GATTC target svc missing");
+        log_printf("BLE GATTC target svc missing\n");
         return false;
     }
 
     if (!ble_gatt_client_discover_characteristics((uint16_t)(m_gatt_demo.service_start_handle + 1U),
                                                   m_gatt_demo.service_end_handle))
     {
-        log_shortf("BLE GATTC char discover failed");
+        log_printf("BLE GATTC char discover failed\n");
         return false;
     }
 
-    log_shortf("BLE GATTC char discover start");
-    log_shortf("range=0x%04X-0x%04X",
+    log_printf("BLE GATTC char discover start\n");
+    log_printf("range=0x%04X-0x%04X\n",
                (unsigned int)(m_gatt_demo.service_start_handle + 1U),
                (unsigned int)m_gatt_demo.service_end_handle);
     return true;
@@ -346,7 +302,7 @@ static bool gatt_discovery_start_descriptors(void)
 
     if (!m_gatt_demo.target_characteristic_found)
     {
-        log_shortf("BLE GATTC target char missing");
+        log_printf("BLE GATTC target char missing\n");
         return false;
     }
 
@@ -354,18 +310,18 @@ static bool gatt_discovery_start_descriptors(void)
     descriptor_start = (uint16_t)(m_gatt_demo.target_characteristic_value_handle + 1U);
     if (descriptor_start > descriptor_end)
     {
-        log_shortf("BLE GATTC no char descriptors");
+        log_printf("BLE GATTC no char descriptors\n");
         return false;
     }
 
     if (!ble_gatt_client_discover_descriptors(descriptor_start, descriptor_end))
     {
-        log_shortf("BLE GATTC desc discover failed");
+        log_printf("BLE GATTC desc discover failed\n");
         return false;
     }
 
-    log_shortf("BLE GATTC desc discover start");
-    log_shortf("range=0x%04X-0x%04X",
+    log_printf("BLE GATTC desc discover start\n");
+    log_printf("range=0x%04X-0x%04X\n",
                (unsigned int)descriptor_start,
                (unsigned int)descriptor_end);
     return true;
@@ -375,18 +331,18 @@ static bool gatt_subscription_enable_notifications(void)
 {
     if (m_gatt_demo.target_cccd_handle == 0U)
     {
-        log_shortf("BLE GATTC CCCD missing");
+        log_printf("BLE GATTC CCCD missing\n");
         return false;
     }
 
     if (!ble_gatt_client_write_cccd(m_gatt_demo.target_cccd_handle, true, false))
     {
-        log_shortf("BLE GATTC CCCD write failed");
+        log_printf("BLE GATTC CCCD write failed\n");
         return false;
     }
 
-    log_shortf("BLE GATTC enable notif");
-    log_shortf("cccd=0x%04X", (unsigned int)m_gatt_demo.target_cccd_handle);
+    log_printf("BLE GATTC enable notif\n");
+    log_printf("cccd=0x%04X\n", (unsigned int)m_gatt_demo.target_cccd_handle);
     return true;
 }
 
@@ -401,12 +357,12 @@ static void start_target_scan(void)
     if (ble_gap_set_scan_filter(&m_target_filter))
     {
         ble_start_scanning();
-        log_shortf("BLE central scan start");
-        log_shortf("svc uuid=%s", uuid_str);
+        log_printf("BLE central scan start\n");
+        log_printf("svc uuid=%s\n", uuid_str);
         return;
     }
 
-    log_shortf("BLE central scan failed");
+    log_printf("BLE central scan failed\n");
 }
 
 static const char *ble_phy_name(uint8_t phy)
@@ -437,10 +393,10 @@ static void gatt_client_evt_handler(const ble_gatt_client_evt_t *p_evt)
     {
     case BLE_GATT_CLIENT_EVT_SERVICE_DISCOVERED:
         gatt_client_uuid_format(&p_evt->params.service.uuid, uuid_str, sizeof(uuid_str));
-        log_shortf("BLE GATTC svc 0x%04X-0x%04X",
+        log_printf("BLE GATTC svc 0x%04X-0x%04X\n",
                    (unsigned int)p_evt->params.service.start_handle,
                    (unsigned int)p_evt->params.service.end_handle);
-        log_shortf("uuid=%s", uuid_str);
+        log_printf("uuid=%s\n", uuid_str);
 
         if (!m_gatt_demo.service_found)
         {
@@ -452,12 +408,12 @@ static void gatt_client_evt_handler(const ble_gatt_client_evt_t *p_evt)
 
     case BLE_GATT_CLIENT_EVT_CHARACTERISTIC_DISCOVERED:
         gatt_client_uuid_format(&p_evt->params.characteristic.uuid, uuid_str, sizeof(uuid_str));
-        log_shortf("BLE GATTC char decl=0x%04X",
+        log_printf("BLE GATTC char decl=0x%04X\n",
                    (unsigned int)p_evt->params.characteristic.declaration_handle);
-        log_shortf("val=0x%04X prop=0x%02X",
+        log_printf("val=0x%04X prop=0x%02X\n",
                    (unsigned int)p_evt->params.characteristic.value_handle,
                    (unsigned int)p_evt->params.characteristic.properties);
-        log_shortf("uuid=%s", uuid_str);
+        log_printf("uuid=%s\n", uuid_str);
 
         if (m_gatt_demo.characteristic_count < GATT_DISCOVERY_MAX_CHARACTERISTICS)
         {
@@ -480,9 +436,9 @@ static void gatt_client_evt_handler(const ble_gatt_client_evt_t *p_evt)
 
     case BLE_GATT_CLIENT_EVT_DESCRIPTOR_DISCOVERED:
         gatt_client_uuid_format(&p_evt->params.descriptor.uuid, uuid_str, sizeof(uuid_str));
-        log_shortf("BLE GATTC desc h=0x%04X",
+        log_printf("BLE GATTC desc h=0x%04X\n",
                    (unsigned int)p_evt->params.descriptor.handle);
-        log_shortf("uuid=%s", uuid_str);
+        log_printf("uuid=%s\n", uuid_str);
 
         if ((m_gatt_demo.target_cccd_handle == 0U) &&
             gatt_client_uuid_matches(&p_evt->params.descriptor.uuid, &m_cccd_uuid))
@@ -492,32 +448,32 @@ static void gatt_client_evt_handler(const ble_gatt_client_evt_t *p_evt)
         return;
 
     case BLE_GATT_CLIENT_EVT_WRITE_RSP:
-        log_shortf("BLE GATTC wr rsp h=0x%04X",
+        log_printf("BLE GATTC wr rsp h=0x%04X\n",
                    (unsigned int)p_evt->params.write.handle);
         return;
 
     case BLE_GATT_CLIENT_EVT_NOTIFICATION:
-        log_shortf("BLE GATTC notif h=0x%04X",
+        log_printf("BLE GATTC notif h=0x%04X\n",
                    (unsigned int)p_evt->params.hvx.handle);
-        log_shortf("len=%u", (unsigned int)p_evt->params.hvx.len);
+        log_printf("len=%u\n", (unsigned int)p_evt->params.hvx.len);
         if ((p_evt->params.hvx.handle == m_gatt_demo.target_characteristic_value_handle) &&
             (p_evt->params.hvx.len > 0U))
         {
-            log_shortf("counter=%u", (unsigned int)p_evt->params.hvx.data[0]);
+            log_printf("counter=%u\n", (unsigned int)p_evt->params.hvx.data[0]);
         }
         return;
 
     case BLE_GATT_CLIENT_EVT_INDICATION:
-        log_shortf("BLE GATTC indic h=0x%04X",
+        log_printf("BLE GATTC indic h=0x%04X\n",
                    (unsigned int)p_evt->params.hvx.handle);
-        log_shortf("len=%u", (unsigned int)p_evt->params.hvx.len);
+        log_printf("len=%u\n", (unsigned int)p_evt->params.hvx.len);
         return;
 
     case BLE_GATT_CLIENT_EVT_ERROR_RSP:
-        log_shortf("BLE GATTC err proc=%u op=0x%02X",
+        log_printf("BLE GATTC err proc=%u op=0x%02X\n",
                    (unsigned int)p_evt->params.error.procedure,
                    (unsigned int)p_evt->params.error.request_opcode);
-        log_shortf("handle=0x%04X err=0x%02X",
+        log_printf("handle=0x%04X err=0x%02X\n",
                    (unsigned int)p_evt->params.error.handle,
                    (unsigned int)p_evt->params.error.error_code);
         return;
@@ -525,35 +481,35 @@ static void gatt_client_evt_handler(const ble_gatt_client_evt_t *p_evt)
     case BLE_GATT_CLIENT_EVT_PROCEDURE_COMPLETE:
         if (p_evt->params.complete.procedure == BLE_GATT_CLIENT_PROC_DISCOVER_PRIMARY_SERVICES_BY_UUID)
         {
-            log_shortf("BLE GATTC svc discover done");
+            log_printf("BLE GATTC svc discover done\n");
             (void)gatt_discovery_start_characteristics();
             return;
         }
 
         if (p_evt->params.complete.procedure == BLE_GATT_CLIENT_PROC_DISCOVER_CHARACTERISTICS)
         {
-            log_shortf("BLE GATTC char discover done");
+            log_printf("BLE GATTC char discover done\n");
             (void)gatt_discovery_start_descriptors();
             return;
         }
 
         if (p_evt->params.complete.procedure == BLE_GATT_CLIENT_PROC_DISCOVER_DESCRIPTORS)
         {
-            log_shortf("BLE GATTC desc discover done");
+            log_printf("BLE GATTC desc discover done\n");
             (void)gatt_subscription_enable_notifications();
             return;
         }
 
         if (p_evt->params.complete.procedure == BLE_GATT_CLIENT_PROC_WRITE_CCCD)
         {
-            log_shortf("BLE GATTC notifications on");
+            log_printf("BLE GATTC notifications on\n");
             return;
         }
 
         return;
 
     case BLE_GATT_CLIENT_EVT_MTU_EXCHANGED:
-        log_shortf("BLE GATTC mtu req=%u neg=%u",
+        log_printf("BLE GATTC mtu req=%u neg=%u\n",
                    (unsigned int)p_evt->params.mtu.requested_mtu,
                    (unsigned int)p_evt->params.mtu.negotiated_mtu);
         return;
@@ -578,9 +534,9 @@ static void gap_evt_handler(const ble_gap_evt_t *p_evt)
     case BLE_GAP_EVT_CONNECTED:
         ble_state_set(true);
         ble_addr_format(&p_evt->params.peer_addr, addr_str, sizeof(addr_str));
-        log_shortf("BLE GAP connected");
-        log_shortf("peer=%s", addr_str);
-        log_shortf("int=%ums lat=%u to=%ums",
+        log_printf("BLE GAP connected\n");
+        log_printf("peer=%s\n", addr_str);
+        log_printf("int=%ums lat=%u to=%ums\n",
                    (unsigned int)p_evt->params.conn_interval_ms,
                    (unsigned int)p_evt->params.slave_latency,
                    (unsigned int)p_evt->params.supervision_timeout_ms);
@@ -588,30 +544,48 @@ static void gap_evt_handler(const ble_gap_evt_t *p_evt)
         return;
 
     case BLE_GAP_EVT_DISCONNECTED:
-        log_shortf("BLE GAP disconnected");
+        log_printf("BLE GAP disconnected\n");
         start_target_scan();
         return;
 
     case BLE_GAP_EVT_SUPERVISION_TIMEOUT:
-        log_shortf("BLE LINK sup timeout");
+        log_printf("BLE LINK sup timeout\n");
         return;
 
     case BLE_GAP_EVT_CONN_UPDATE_IND:
-        log_shortf("BLE GAP conn updated");
-        log_shortf("int=%ums lat=%u to=%ums",
+        log_printf("BLE GAP conn updated\n");
+        log_printf("int=%ums lat=%u to=%ums\n",
                    (unsigned int)p_evt->params.conn_interval_ms,
                    (unsigned int)p_evt->params.slave_latency,
                    (unsigned int)p_evt->params.supervision_timeout_ms);
         return;
 
     case BLE_GAP_EVT_PHY_UPDATE_IND:
-        log_shortf("BLE GAP PHY tx=%s rx=%s",
+        log_printf("BLE GAP PHY tx=%s rx=%s\n",
                    ble_phy_name(p_evt->params.tx_phy),
                    ble_phy_name(p_evt->params.rx_phy));
         return;
 
+    case BLE_GAP_EVT_FEATURE_EXCHANGED:
+        log_printf("BLE GAP features %02X %02X\n",
+                   (unsigned int)p_evt->params.features[0],
+                   (unsigned int)p_evt->params.features[1]);
+        return;
+
+    case BLE_GAP_EVT_DATA_LENGTH_UPDATED:
+        log_printf("BLE GAP data len tx=%u rx=%u\n",
+                   (unsigned int)p_evt->params.max_tx_octets,
+                   (unsigned int)p_evt->params.max_rx_octets);
+        return;
+
+    case BLE_GAP_EVT_CONTROL_PROCEDURE_UNSUPPORTED:
+        log_printf("BLE GAP ctrl unsup proc=%u op=0x%02X\n",
+                   (unsigned int)p_evt->params.procedure,
+                   (unsigned int)p_evt->params.unsupported_opcode);
+        return;
+
     case BLE_GAP_EVT_TERMINATE_IND:
-        log_shortf("BLE LINK terminate");
+        log_printf("BLE LINK terminate\n");
         return;
 
     default:
@@ -636,8 +610,8 @@ int main(void)
     ble_scan_init(&m_scan_config);
 
     gatt_client_uuid_format(&m_target_service_uuid, uuid_str, sizeof(uuid_str));
-    log_shortf("BLE central demo");
-    log_shortf("target svc=%s", uuid_str);
+    log_printf("BLE central demo\n");
+    log_printf("target svc=%s\n", uuid_str);
     start_target_scan();
 
     while (1)

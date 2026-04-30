@@ -52,6 +52,27 @@ static bool ble_evt_post(const ble_deferred_evt_t *p_evt)
     return true;
 }
 
+static void ble_gap_evt_fill_common(ble_gap_evt_t *p_evt)
+{
+    if (p_evt == NULL)
+    {
+        return;
+    }
+
+    p_evt->params.conn_interval_ms = m_link.conn.conn_interval_ms;
+    p_evt->params.slave_latency = m_link.conn.slave_latency;
+    p_evt->params.supervision_timeout_ms = m_link.conn.supervision_timeout_ms;
+    p_evt->params.tx_phy = m_link.phy.tx_phy;
+    p_evt->params.rx_phy = m_link.phy.rx_phy;
+    p_evt->params.max_tx_octets = m_link.packet.max_tx_octets;
+    p_evt->params.max_rx_octets = m_link.packet.max_rx_octets;
+    p_evt->params.max_tx_time_us = m_link.packet.max_tx_time_us;
+    p_evt->params.max_rx_time_us = m_link.packet.max_rx_time_us;
+    p_evt->params.role = m_link.role;
+    p_evt->params.peer_addr = m_link.peer_addr;
+    (void)memcpy(p_evt->params.features, m_link.peer_features, sizeof(p_evt->params.features));
+}
+
 uint16_t u16_decode(const uint8_t *p_src)
 {
     return (uint16_t)p_src[0] | ((uint16_t)p_src[1] << 8);
@@ -83,13 +104,26 @@ bool ble_evt_notify_gap(ble_gap_evt_type_t evt_type)
     (void)memset(&evt, 0, sizeof(evt));
     evt.kind = BLE_DEFERRED_EVT_KIND_GAP;
     evt.params.gap_evt.evt_type = evt_type;
-    evt.params.gap_evt.params.conn_interval_ms = m_link.conn.conn_interval_ms;
-    evt.params.gap_evt.params.slave_latency = m_link.conn.slave_latency;
-    evt.params.gap_evt.params.supervision_timeout_ms = m_link.conn.supervision_timeout_ms;
-    evt.params.gap_evt.params.tx_phy = m_link.phy.tx_phy;
-    evt.params.gap_evt.params.rx_phy = m_link.phy.rx_phy;
-    evt.params.gap_evt.params.role = m_link.role;
-    evt.params.gap_evt.params.peer_addr = m_link.peer_addr;
+    ble_gap_evt_fill_common(&evt.params.gap_evt);
+    return ble_evt_post(&evt);
+}
+
+bool ble_evt_notify_gap_ctrl_procedure_unsupported(ble_gap_ctrl_procedure_t procedure,
+                                                   uint8_t unsupported_opcode)
+{
+    ble_deferred_evt_t evt;
+
+    if (m_gap_evt_handler == NULL)
+    {
+        return false;
+    }
+
+    (void)memset(&evt, 0, sizeof(evt));
+    evt.kind = BLE_DEFERRED_EVT_KIND_GAP;
+    evt.params.gap_evt.evt_type = BLE_GAP_EVT_CONTROL_PROCEDURE_UNSUPPORTED;
+    ble_gap_evt_fill_common(&evt.params.gap_evt);
+    evt.params.gap_evt.params.procedure = procedure;
+    evt.params.gap_evt.params.unsupported_opcode = unsupported_opcode;
     return ble_evt_post(&evt);
 }
 
@@ -177,17 +211,6 @@ void SWI1_EGU1_IRQHandler(void)
         evt = m_evt_dispatch.q[m_evt_dispatch.ridx];
         m_evt_dispatch.ridx = (uint8_t)((m_evt_dispatch.ridx + 1U) % BLE_EVT_QUEUE_SIZE);
         irq_unlock(primask);
-
-        if ((evt.kind == BLE_DEFERRED_EVT_KIND_GAP) &&
-            (evt.params.gap_evt.evt_type == BLE_GAP_EVT_CONNECTED))
-        {
-            ble_conn_param_update_timer_start();
-        }
-        else if ((evt.kind == BLE_DEFERRED_EVT_KIND_GAP) &&
-                 (evt.params.gap_evt.evt_type == BLE_GAP_EVT_DISCONNECTED))
-        {
-            ble_conn_param_update_timer_stop();
-        }
 
         if ((evt.kind == BLE_DEFERRED_EVT_KIND_GAP) &&
             (m_gap_evt_handler != NULL))

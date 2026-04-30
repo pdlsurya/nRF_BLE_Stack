@@ -13,14 +13,17 @@
 
 #include <string.h>
 
-#include "app_error.h"
-
-APP_TIMER_DEF(m_conn_param_update_timer_id);
-
-static void ble_conn_param_update_timeout_handler(void *p_context)
+static bool ble_gap_conn_params_are_valid(const ble_gap_conn_params_t *p_params)
 {
-    (void)p_context;
-    (void)ble_gap_update_conn_params();
+    if (p_params == NULL)
+    {
+        return false;
+    }
+
+    return (p_params->min_conn_interval_1p25ms != 0U) &&
+           (p_params->max_conn_interval_1p25ms != 0U) &&
+           (p_params->min_conn_interval_1p25ms <= p_params->max_conn_interval_1p25ms) &&
+           (p_params->supervision_timeout_10ms != 0U);
 }
 
 static size_t ble_scan_filter_name_len(const char *p_name)
@@ -71,10 +74,7 @@ void ble_gap_set_conn_params(const ble_gap_conn_params_t *p_params)
         return;
     }
 
-    if ((p_params->min_conn_interval_1p25ms == 0U) ||
-        (p_params->max_conn_interval_1p25ms == 0U) ||
-        (p_params->min_conn_interval_1p25ms > p_params->max_conn_interval_1p25ms) ||
-        (p_params->supervision_timeout_10ms == 0U))
+    if (!ble_gap_conn_params_are_valid(p_params))
     {
         return;
     }
@@ -127,7 +127,7 @@ void ble_gap_clear_scan_filter(void)
     m_ctrl_rt.connect_target_valid = false;
 }
 
-bool ble_gap_update_conn_params(void)
+bool ble_gap_request_conn_params_update(void)
 {
     uint8_t sig_pdu[BLE_L2CAP_SIG_HDR_LEN + 8U];
 
@@ -154,25 +154,15 @@ bool ble_gap_update_conn_params(void)
     return controller_queue_l2cap_payload(BLE_L2CAP_CID_SIGNALING, sig_pdu, sizeof(sig_pdu));
 }
 
-void ble_conn_param_update_timer_init(void)
+bool ble_gap_initiate_conn_update(const ble_gap_conn_params_t *p_params)
 {
-    APP_ERROR_CHECK(app_timer_create(&m_conn_param_update_timer_id, APP_TIMER_MODE_SINGLE_SHOT, ble_conn_param_update_timeout_handler));
-}
-
-void ble_conn_param_update_timer_start(void)
-{
-    if (!m_host.preferred_conn_params_valid)
+    if (!ble_host_role_is_configured(BLE_GAP_ROLE_CENTRAL) ||
+        !ble_gap_conn_params_are_valid(p_params))
     {
-        return;
+        return false;
     }
 
-    APP_ERROR_CHECK(app_timer_stop(m_conn_param_update_timer_id));
-    APP_ERROR_CHECK(app_timer_start(m_conn_param_update_timer_id, APP_TIMER_TICKS(BLE_CONN_PARAM_UPDATE_DELAY_MS), NULL));
-}
-
-void ble_conn_param_update_timer_stop(void)
-{
-    APP_ERROR_CHECK(app_timer_stop(m_conn_param_update_timer_id));
+    return controller_initiate_conn_update(p_params);
 }
 
 void ble_adv_init(const ble_adv_config_t *p_config)

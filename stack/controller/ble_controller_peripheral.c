@@ -263,12 +263,8 @@ void radio_handle_connected_packet_peripheral(void)
 
     m_ctrl_rt.conn_rx_process_pending = m_ctrl_rt.conn_bcmatch.is_new_packet;
     new_tx_pdu = !m_ctrl_rt.tx_unacked;
-    if (new_tx_pdu && m_ctrl_rt.conn_bcmatch.consumes_pending)
-    {
-        m_ctrl_rt.has_pending_conn_tx_pdu = false;
-    }
-    controller_reset_conn_bcmatch_state();
     controller_stage_conn_response(new_tx_pdu);
+    controller_reset_conn_bcmatch_state();
 
     m_link.supervision.started = true;
 }

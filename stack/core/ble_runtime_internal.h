@@ -36,7 +36,6 @@
 #define BLE_CONN_TIMER_IRQ_PRIORITY 0U
 #define BLE_EVT_IRQ_PRIORITY 6U
 #define BLE_EVT_QUEUE_SIZE 16U
-#define BLE_CONN_PARAM_UPDATE_DELAY_MS 6000U
 #define BLE_INITIATOR_WIN_OFFSET_UNITS 6U
 #define BLE_INITIATOR_WIN_SIZE_UNITS 2U
 #define BLE_INITIATOR_HOP_INCREMENT 5U
@@ -44,6 +43,8 @@
 #define BLE_LL_DATA_LEN_MAX_OCTETS 251U
 #define BLE_LL_DATA_LEN_DEFAULT_TIME 328U
 #define BLE_LL_DATA_LEN_MAX_TIME 2120U
+#define BLE_LL_CTRL_CONN_UPDATE_WIN_SIZE_UNITS 1U
+#define BLE_LL_CTRL_INSTANT_OFFSET_EVENTS 6U
 
 #define BLE_LL_CTRL_CONN_UPDATE_IND 0x00U
 #define BLE_LL_CTRL_CHANNEL_MAP_IND 0x01U
@@ -105,6 +106,8 @@ typedef struct
     uint32_t crc_init;
     uint16_t max_tx_octets;
     uint16_t max_rx_octets;
+    uint16_t max_tx_time_us;
+    uint16_t max_rx_time_us;
     uint8_t next_expected_rx_sn;
     uint8_t tx_sn;
 } ble_link_packet_state_t;
@@ -155,6 +158,7 @@ typedef struct
     ble_link_phy_state_t phy;
     ble_link_supervision_state_t supervision;
     uint16_t event_counter;
+    uint8_t peer_features[8];
     ble_link_pending_channel_map_t pending_channel_map;
     ble_link_pending_conn_update_t pending_conn_update;
     ble_link_pending_phy_update_t pending_phy_update;
@@ -204,8 +208,36 @@ typedef struct
 {
     bool tx_acked;
     bool is_new_packet;
-    bool consumes_pending;
 } ble_conn_bcmatch_state_t;
+
+typedef enum
+{
+    BLE_CONN_PENDING_SOURCE_NONE = 0,
+    BLE_CONN_PENDING_SOURCE_CONTROL_RESPONSE,
+    BLE_CONN_PENDING_SOURCE_CONTROL,
+    BLE_CONN_PENDING_SOURCE_L2CAP,
+} ble_conn_pending_source_t;
+
+typedef enum
+{
+    BLE_CENTRAL_CTRL_PROC_STATE_IDLE = 0,
+    BLE_CENTRAL_CTRL_PROC_STATE_WAIT_RSP,
+    BLE_CENTRAL_CTRL_PROC_STATE_WAIT_INSTANT,
+} ble_central_ctrl_proc_state_t;
+
+typedef enum
+{
+    BLE_AUTO_CTRL_STAGE_IDLE = 0,
+    BLE_AUTO_CTRL_STAGE_WAIT_FEATURES,
+    BLE_AUTO_CTRL_STAGE_WAIT_DATA_LENGTH,
+    BLE_AUTO_CTRL_STAGE_WAIT_PHY,
+} ble_auto_ctrl_stage_t;
+
+typedef struct
+{
+    ble_gap_ctrl_procedure_t procedure;
+    ble_central_ctrl_proc_state_t state;
+} ble_central_ctrl_proc_context_t;
 
 typedef struct
 {
@@ -215,6 +247,8 @@ typedef struct
     ble_adv_rx_pdu_t scan_rx_pdu;
     ble_connect_req_pdu_t connect_req_pdu;
     ble_ll_data_raw_pdu_t conn_rx_pdu;
+    ble_ll_data_raw_pdu_t pending_conn_ctrl_rsp_pdu;
+    ble_ll_data_raw_pdu_t pending_conn_ctrl_pdu;
     ble_ll_data_raw_pdu_t conn_tx_pdu;
     ble_ll_data_raw_pdu_t last_conn_tx_pdu;
     ble_ll_data_raw_pdu_t pending_conn_tx_pdu;
@@ -230,12 +264,17 @@ typedef struct
     bool adv_scan_rsp_pending;
     bool adv_connect_pending;
     bool tx_unacked;
+    bool has_pending_conn_ctrl_rsp_pdu;
+    bool has_pending_conn_ctrl_pdu;
     bool has_pending_conn_tx_pdu;
     bool conn_rx_process_pending;
+    uint8_t selected_conn_tx_source;
     ble_adv_radio_phase_t adv_radio_phase;
     ble_scan_radio_phase_t scan_radio_phase;
     ble_conn_radio_phase_t conn_radio_phase;
     ble_conn_bcmatch_state_t conn_bcmatch;
+    ble_central_ctrl_proc_context_t central_ctrl_proc;
+    ble_auto_ctrl_stage_t auto_ctrl_stage;
     uint32_t conn_next_event_tick_us;
 } ble_ctrl_runtime_t;
 
@@ -295,6 +334,7 @@ uint16_t u16_decode(const uint8_t *p_src);
 void u16_encode(uint16_t value, uint8_t *p_dst);
 void ble_evt_dispatch_init(void);
 bool ble_evt_notify_gap(ble_gap_evt_type_t evt_type);
+bool ble_evt_notify_gap_ctrl_procedure_unsupported(ble_gap_ctrl_procedure_t procedure, uint8_t unsupported_opcode);
 bool ble_evt_notify_scan_report(const ble_gap_scan_report_t *p_report);
 bool ble_evt_notify_gatt_characteristic(ble_gatt_char_evt_type_t evt_type, ble_gatt_characteristic_t *p_characteristic);
 bool ble_evt_notify_gatt_server_mtu_exchange(uint16_t requested_mtu, uint16_t response_mtu, uint16_t effective_mtu);
@@ -303,13 +343,11 @@ bool ble_uuid_is_valid(const ble_uuid_t *p_uuid);
 uint16_t ble_uuid_encoded_len(const ble_uuid_t *p_uuid);
 bool ble_uuid_encode(const ble_uuid_t *p_uuid, uint8_t *p_dst);
 bool ble_uuid_matches_bytes(const ble_uuid_t *p_uuid, const uint8_t *p_uuid_bytes, uint16_t uuid_len);
-void ble_conn_param_update_timer_init(void);
-void ble_conn_param_update_timer_start(void);
-void ble_conn_param_update_timer_stop(void);
 void controller_load_identity_address(void);
 
 void controller_runtime_init(void);
 bool controller_queue_l2cap_payload(uint16_t cid, const uint8_t *p_payload, uint16_t payload_len);
+bool controller_initiate_conn_update(const ble_gap_conn_params_t *p_params);
 void controller_start_advertising_internal(void);
 void controller_stop_scanning_internal(void);
 void controller_start_scanning_internal(void);

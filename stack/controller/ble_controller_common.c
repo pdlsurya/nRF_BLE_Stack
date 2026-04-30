@@ -43,6 +43,31 @@ static uint8_t controller_symmetric_phy_mask_from_req(const uint8_t *p_payload, 
     return (requested_phys != 0U) ? requested_phys : BLE_LL_PHY_1M;
 }
 
+static void controller_local_features_fill(uint8_t features[8])
+{
+    (void)memset(features, 0, 8U);
+    features[0] = BLE_LL_FEATURE_DATA_LENGTH_EXTENSION;
+    features[1] = BLE_LL_FEATURE_2M_PHY;
+}
+
+static void controller_store_peer_features(const uint8_t *p_payload, uint8_t len)
+{
+    uint8_t local_features[8];
+    uint8_t i;
+
+    (void)memset(m_link.peer_features, 0, sizeof(m_link.peer_features));
+    if ((p_payload == NULL) || (len < 9U))
+    {
+        return;
+    }
+
+    controller_local_features_fill(local_features);
+    for (i = 0U; i < sizeof(m_link.peer_features); i++)
+    {
+        m_link.peer_features[i] = (uint8_t)(p_payload[1U + i] & local_features[i]);
+    }
+}
+
 void controller_set_mode_with_phy(radio_mode_t mode, uint8_t phy)
 {
     radio_cfg_drate_plen_and_enable_mode(mode, controller_radio_data_rate_for_phy(phy), controller_radio_preamble_for_phy(phy));
@@ -108,6 +133,11 @@ uint32_t controller_conn_next_event_tick_from_anchor(uint32_t current_event_tick
         next_event_tick_us = current_event_tick_us + m_link.conn.conn_interval_us;
         m_link.pending_conn_update.valid = false;
         m_link.supervision.missed_interval_count = 0U;
+        if ((m_ctrl_rt.central_ctrl_proc.procedure == BLE_GAP_CTRL_PROC_CONN_UPDATE) &&
+            (m_ctrl_rt.central_ctrl_proc.state == BLE_CENTRAL_CTRL_PROC_STATE_WAIT_INSTANT))
+        {
+            controller_central_ctrl_proc_reset();
+        }
         (void)ble_evt_notify_gap(BLE_GAP_EVT_CONN_UPDATE_IND);
     }
 
@@ -168,10 +198,26 @@ static uint16_t controller_data_length_octets_clamp(uint16_t octets)
     return (octets > BLE_LL_DATA_LEN_MAX_OCTETS) ? BLE_LL_DATA_LEN_MAX_OCTETS : octets;
 }
 
-static void controller_apply_data_length(uint16_t peer_max_rx_octets, uint16_t peer_max_tx_octets)
+static uint16_t controller_data_length_time_clamp(uint16_t time_us)
+{
+    if (time_us < BLE_LL_DATA_LEN_DEFAULT_TIME)
+    {
+        return BLE_LL_DATA_LEN_DEFAULT_TIME;
+    }
+
+    return (time_us > BLE_LL_DATA_LEN_MAX_TIME) ? BLE_LL_DATA_LEN_MAX_TIME : time_us;
+}
+
+static void controller_apply_data_length(uint16_t peer_max_rx_octets,
+                                         uint16_t peer_max_rx_time_us,
+                                         uint16_t peer_max_tx_octets,
+                                         uint16_t peer_max_tx_time_us)
 {
     m_link.packet.max_tx_octets = controller_data_length_octets_clamp(peer_max_rx_octets);
     m_link.packet.max_rx_octets = controller_data_length_octets_clamp(peer_max_tx_octets);
+    m_link.packet.max_tx_time_us = controller_data_length_time_clamp(peer_max_rx_time_us);
+    m_link.packet.max_rx_time_us = controller_data_length_time_clamp(peer_max_tx_time_us);
+    (void)ble_evt_notify_gap(BLE_GAP_EVT_DATA_LENGTH_UPDATED);
 }
 
 static void controller_schedule_phy_update(const uint8_t *p_payload, uint8_t len)
@@ -211,9 +257,9 @@ static void controller_schedule_phy_update(const uint8_t *p_payload, uint8_t len
     m_link.pending_phy_update.valid = true;
 }
 
-static void controller_schedule_conn_update(const uint8_t *p_payload, uint8_t len)
+void controller_schedule_conn_update(const uint8_t *p_payload, uint8_t len)
 {
-    if ((p_payload == NULL) || (len < 11U))
+    if ((p_payload == NULL) || (len < 12U))
     {
         return;
     }
@@ -270,6 +316,51 @@ ble_ll_data_header_t controller_conn_header_for_state(uint8_t llid, uint8_t next
     };
 }
 
+static bool controller_queue_control_payload(ble_ll_data_raw_pdu_t *p_pdu,
+                                             bool *p_has_pending,
+                                             const uint8_t *p_payload,
+                                             uint8_t payload_len)
+{
+    uint32_t primask;
+
+    if ((p_pdu == NULL) || (p_has_pending == NULL) || (p_payload == NULL) ||
+        (payload_len == 0U) || !m_link.connected ||
+        (payload_len > sizeof(p_pdu->payload)))
+    {
+        return false;
+    }
+
+    primask = irq_lock();
+    if (*p_has_pending)
+    {
+        irq_unlock(primask);
+        return false;
+    }
+
+    p_pdu->header = controller_conn_header(BLE_LLID_CONTROL_PDU);
+    p_pdu->length = payload_len;
+    (void)memcpy(p_pdu->payload, p_payload, payload_len);
+    *p_has_pending = true;
+    irq_unlock(primask);
+    return true;
+}
+
+static bool controller_queue_ll_control_response_payload(const uint8_t *p_payload, uint8_t payload_len)
+{
+    return controller_queue_control_payload(&m_ctrl_rt.pending_conn_ctrl_rsp_pdu,
+                                            &m_ctrl_rt.has_pending_conn_ctrl_rsp_pdu,
+                                            p_payload,
+                                            payload_len);
+}
+
+bool controller_queue_ll_control_payload(const uint8_t *p_payload, uint8_t payload_len)
+{
+    return controller_queue_control_payload(&m_ctrl_rt.pending_conn_ctrl_pdu,
+                                            &m_ctrl_rt.has_pending_conn_ctrl_pdu,
+                                            p_payload,
+                                            payload_len);
+}
+
 bool controller_adv_type_is_connectable(uint8_t adv_type)
 {
     return (adv_type == LL_ADV_IND) || (adv_type == LL_ADV_DIRECT_IND);
@@ -316,7 +407,58 @@ void controller_reset_conn_bcmatch_state(void)
 {
     m_ctrl_rt.conn_bcmatch.tx_acked = false;
     m_ctrl_rt.conn_bcmatch.is_new_packet = false;
-    m_ctrl_rt.conn_bcmatch.consumes_pending = false;
+    m_ctrl_rt.selected_conn_tx_source = BLE_CONN_PENDING_SOURCE_NONE;
+}
+
+static void controller_clear_consumed_pending_source(uint8_t pending_source)
+{
+    if (pending_source == BLE_CONN_PENDING_SOURCE_CONTROL_RESPONSE)
+    {
+        m_ctrl_rt.has_pending_conn_ctrl_rsp_pdu = false;
+    }
+    else if (pending_source == BLE_CONN_PENDING_SOURCE_CONTROL)
+    {
+        m_ctrl_rt.has_pending_conn_ctrl_pdu = false;
+    }
+    else if (pending_source == BLE_CONN_PENDING_SOURCE_L2CAP)
+    {
+        m_ctrl_rt.has_pending_conn_tx_pdu = false;
+    }
+}
+
+bool controller_load_pending_conn_tx_pdu_for_state(uint8_t next_expected_rx_sn, uint8_t tx_sn)
+{
+    if (m_ctrl_rt.has_pending_conn_ctrl_rsp_pdu)
+    {
+        m_ctrl_rt.conn_tx_pdu = m_ctrl_rt.pending_conn_ctrl_rsp_pdu;
+        m_ctrl_rt.conn_tx_pdu.header = controller_conn_header_for_state(m_ctrl_rt.conn_tx_pdu.header.llid,
+                                                                        next_expected_rx_sn,
+                                                                        tx_sn);
+        m_ctrl_rt.selected_conn_tx_source = BLE_CONN_PENDING_SOURCE_CONTROL_RESPONSE;
+        return true;
+    }
+
+    if (m_ctrl_rt.has_pending_conn_ctrl_pdu)
+    {
+        m_ctrl_rt.conn_tx_pdu = m_ctrl_rt.pending_conn_ctrl_pdu;
+        m_ctrl_rt.conn_tx_pdu.header = controller_conn_header_for_state(m_ctrl_rt.conn_tx_pdu.header.llid,
+                                                                        next_expected_rx_sn,
+                                                                        tx_sn);
+        m_ctrl_rt.selected_conn_tx_source = BLE_CONN_PENDING_SOURCE_CONTROL;
+        return true;
+    }
+
+    if (m_ctrl_rt.has_pending_conn_tx_pdu)
+    {
+        m_ctrl_rt.conn_tx_pdu = m_ctrl_rt.pending_conn_tx_pdu;
+        m_ctrl_rt.conn_tx_pdu.header = controller_conn_header_for_state(m_ctrl_rt.conn_tx_pdu.header.llid,
+                                                                        next_expected_rx_sn,
+                                                                        tx_sn);
+        m_ctrl_rt.selected_conn_tx_source = BLE_CONN_PENDING_SOURCE_L2CAP;
+        return true;
+    }
+
+    return false;
 }
 
 void controller_reset_adv_radio_state(void)
@@ -338,6 +480,8 @@ void controller_disconnect_internal(void)
     m_link.peer_addr = (ble_gap_addr_t){0};
     m_link.conn.conn_interval_us = 0U;
     m_ctrl_rt.tx_unacked = false;
+    m_ctrl_rt.has_pending_conn_ctrl_rsp_pdu = false;
+    m_ctrl_rt.has_pending_conn_ctrl_pdu = false;
     m_ctrl_rt.has_pending_conn_tx_pdu = false;
     m_ctrl_rt.conn_rx_process_pending = false;
     m_ctrl_rt.scanning = false;
@@ -346,6 +490,7 @@ void controller_disconnect_internal(void)
     m_ctrl_rt.scan_radio_phase = BLE_SCAN_RADIO_PHASE_IDLE;
     m_ctrl_rt.conn_radio_phase = BLE_CONN_RADIO_PHASE_IDLE;
     controller_reset_conn_bcmatch_state();
+    controller_central_state_reset();
     m_link.pending_channel_map.valid = false;
     m_link.pending_conn_update.valid = false;
     m_link.pending_phy_update.valid = false;
@@ -391,11 +536,28 @@ static uint16_t ll_control_process(const uint8_t *p_payload, uint8_t len, uint8_
 
     case BLE_LL_CTRL_FEATURE_REQ:
     case BLE_LL_CTRL_SLV_FEATURE_REQ:
+        controller_store_peer_features(p_payload, len);
+        if ((m_ctrl_rt.central_ctrl_proc.procedure == BLE_GAP_CTRL_PROC_FEATURE_EXCHANGE) &&
+            (m_ctrl_rt.central_ctrl_proc.state == BLE_CENTRAL_CTRL_PROC_STATE_WAIT_RSP))
+        {
+            controller_central_ctrl_proc_reset();
+        }
+        (void)ble_evt_notify_gap(BLE_GAP_EVT_FEATURE_EXCHANGED);
+        controller_central_auto_ctrl_complete(BLE_GAP_CTRL_PROC_FEATURE_EXCHANGE);
         p_rsp[0] = BLE_LL_CTRL_FEATURE_RSP;
-        (void)memset(&p_rsp[1], 0, 8U);
-        p_rsp[1] = BLE_LL_FEATURE_DATA_LENGTH_EXTENSION;
-        p_rsp[2] = BLE_LL_FEATURE_2M_PHY;
+        controller_local_features_fill(&p_rsp[1]);
         return 9U;
+
+    case BLE_LL_CTRL_FEATURE_RSP:
+        controller_store_peer_features(p_payload, len);
+        if ((m_ctrl_rt.central_ctrl_proc.procedure == BLE_GAP_CTRL_PROC_FEATURE_EXCHANGE) &&
+            (m_ctrl_rt.central_ctrl_proc.state == BLE_CENTRAL_CTRL_PROC_STATE_WAIT_RSP))
+        {
+            controller_central_ctrl_proc_reset();
+        }
+        (void)ble_evt_notify_gap(BLE_GAP_EVT_FEATURE_EXCHANGED);
+        controller_central_auto_ctrl_complete(BLE_GAP_CTRL_PROC_FEATURE_EXCHANGE);
+        return 0U;
 
     case BLE_LL_CTRL_VERSION_IND:
         p_rsp[0] = BLE_LL_CTRL_VERSION_IND;
@@ -407,7 +569,16 @@ static uint16_t ll_control_process(const uint8_t *p_payload, uint8_t len, uint8_
     case BLE_LL_CTRL_LENGTH_REQ:
         if (len >= 9U)
         {
-            controller_apply_data_length(u16_decode(&p_payload[1]), u16_decode(&p_payload[5]));
+            if ((m_ctrl_rt.central_ctrl_proc.procedure == BLE_GAP_CTRL_PROC_DATA_LENGTH_UPDATE) &&
+                (m_ctrl_rt.central_ctrl_proc.state == BLE_CENTRAL_CTRL_PROC_STATE_WAIT_RSP))
+            {
+                controller_central_ctrl_proc_reset();
+            }
+            controller_apply_data_length(u16_decode(&p_payload[1]),
+                                         u16_decode(&p_payload[3]),
+                                         u16_decode(&p_payload[5]),
+                                         u16_decode(&p_payload[7]));
+            controller_central_auto_ctrl_complete(BLE_GAP_CTRL_PROC_DATA_LENGTH_UPDATE);
         }
         p_rsp[0] = BLE_LL_CTRL_LENGTH_RSP;
         u16_encode(BLE_LL_DATA_LEN_MAX_OCTETS, &p_rsp[1]);
@@ -419,7 +590,16 @@ static uint16_t ll_control_process(const uint8_t *p_payload, uint8_t len, uint8_
     case BLE_LL_CTRL_LENGTH_RSP:
         if (len >= 9U)
         {
-            controller_apply_data_length(u16_decode(&p_payload[1]), u16_decode(&p_payload[5]));
+            if ((m_ctrl_rt.central_ctrl_proc.procedure == BLE_GAP_CTRL_PROC_DATA_LENGTH_UPDATE) &&
+                (m_ctrl_rt.central_ctrl_proc.state == BLE_CENTRAL_CTRL_PROC_STATE_WAIT_RSP))
+            {
+                controller_central_ctrl_proc_reset();
+            }
+            controller_apply_data_length(u16_decode(&p_payload[1]),
+                                         u16_decode(&p_payload[3]),
+                                         u16_decode(&p_payload[5]),
+                                         u16_decode(&p_payload[7]));
+            controller_central_auto_ctrl_complete(BLE_GAP_CTRL_PROC_DATA_LENGTH_UPDATE);
         }
         return 0U;
 
@@ -434,13 +614,23 @@ static uint16_t ll_control_process(const uint8_t *p_payload, uint8_t len, uint8_
     }
 
     case BLE_LL_CTRL_PHY_RSP:
-        return 0U;
+        return controller_central_process_phy_rsp(p_payload, len, p_rsp);
 
     case BLE_LL_CTRL_PHY_UPDATE_IND:
         controller_schedule_phy_update(p_payload, len);
         return 0U;
 
     case BLE_LL_CTRL_UNKNOWN_RSP:
+        if ((len >= 2U) &&
+            (m_ctrl_rt.central_ctrl_proc.state == BLE_CENTRAL_CTRL_PROC_STATE_WAIT_RSP) &&
+            (p_payload[1] == controller_central_ctrl_proc_request_opcode(m_ctrl_rt.central_ctrl_proc.procedure)))
+        {
+            ble_gap_ctrl_procedure_t procedure = m_ctrl_rt.central_ctrl_proc.procedure;
+
+            controller_central_ctrl_proc_reset();
+            (void)ble_evt_notify_gap_ctrl_procedure_unsupported(procedure, p_payload[1]);
+            controller_central_auto_ctrl_complete(procedure);
+        }
         return 0U;
 
     case BLE_LL_CTRL_TERMINATE_IND:
@@ -514,11 +704,19 @@ static uint16_t controller_process_l2cap_signaling(const uint8_t *p_sig,
         (m_link.role == BLE_GAP_ROLE_CENTRAL) &&
         (length >= 8U))
     {
+        ble_gap_conn_params_t requested_params = {
+            .min_conn_interval_1p25ms = u16_decode(&p_sig[4]),
+            .max_conn_interval_1p25ms = u16_decode(&p_sig[6]),
+            .slave_latency = u16_decode(&p_sig[8]),
+            .supervision_timeout_10ms = u16_decode(&p_sig[10]),
+        };
+        bool accept = controller_initiate_conn_update(&requested_params);
+
         p_rsp[0] = BLE_L2CAP_SIG_CONN_PARAM_UPDATE_RSP;
         p_rsp[1] = identifier;
         u16_encode(2U, &p_rsp[2]);
-        /* The stack does not yet initiate LL connection update procedures. */
-        u16_encode(BLE_L2CAP_SIG_CONN_PARAM_REJECTED, &p_rsp[4]);
+        u16_encode(accept ? BLE_L2CAP_SIG_CONN_PARAM_ACCEPTED : BLE_L2CAP_SIG_CONN_PARAM_REJECTED,
+                   &p_rsp[4]);
         return 6U;
     }
 
@@ -532,6 +730,10 @@ void controller_stage_conn_response(bool new_tx_pdu)
     {
         m_ctrl_rt.last_conn_tx_pdu = m_ctrl_rt.conn_tx_pdu;
         m_ctrl_rt.tx_unacked = true;
+        if (m_ctrl_rt.selected_conn_tx_source != BLE_CONN_PENDING_SOURCE_NONE)
+        {
+            controller_clear_consumed_pending_source(m_ctrl_rt.selected_conn_tx_source);
+        }
     }
 }
 
@@ -540,6 +742,7 @@ void controller_process_received_conn_pdu(void)
     ble_ll_data_raw_pdu_t rx_pdu = m_ctrl_rt.conn_rx_pdu;
     uint16_t ctrl_rsp_len = 0U;
     uint16_t att_rsp_len = 0U;
+    uint8_t ctrl_rsp[sizeof(m_ctrl_rt.pending_conn_ctrl_rsp_pdu.payload)];
     uint8_t att_rsp[BLE_ATT_MAX_MTU];
 
     if (rx_pdu.header.llid == BLE_LLID_CONTROL_PDU)
@@ -549,12 +752,10 @@ void controller_process_received_conn_pdu(void)
             return;
         }
 
-        ctrl_rsp_len = ll_control_process(rx_pdu.payload, rx_pdu.length, m_ctrl_rt.pending_conn_tx_pdu.payload);
+        ctrl_rsp_len = ll_control_process(rx_pdu.payload, rx_pdu.length, ctrl_rsp);
         if ((ctrl_rsp_len > 0U) && m_link.connected)
         {
-            m_ctrl_rt.pending_conn_tx_pdu.header = controller_conn_header(BLE_LLID_CONTROL_PDU);
-            m_ctrl_rt.pending_conn_tx_pdu.length = (uint8_t)ctrl_rsp_len;
-            m_ctrl_rt.has_pending_conn_tx_pdu = true;
+            (void)controller_queue_ll_control_response_payload(ctrl_rsp, (uint8_t)ctrl_rsp_len);
         }
         return;
     }
@@ -624,13 +825,7 @@ void controller_prestage_conn_response_from_header(void)
         next_expected_rx_sn ^= 1U;
     }
 
-    if (m_ctrl_rt.has_pending_conn_tx_pdu)
-    {
-        m_ctrl_rt.conn_tx_pdu = m_ctrl_rt.pending_conn_tx_pdu;
-        m_ctrl_rt.conn_tx_pdu.header = controller_conn_header_for_state(m_ctrl_rt.conn_tx_pdu.header.llid, next_expected_rx_sn, tx_sn);
-        m_ctrl_rt.conn_bcmatch.consumes_pending = true;
-    }
-    else
+    if (!controller_load_pending_conn_tx_pdu_for_state(next_expected_rx_sn, tx_sn))
     {
         m_ctrl_rt.conn_tx_pdu.header = controller_conn_header_for_state(BLE_LLID_CONTINUATION, next_expected_rx_sn, tx_sn);
         m_ctrl_rt.conn_tx_pdu.length = 0U;
@@ -690,7 +885,13 @@ void TIMER0_IRQHandler(void)
     {
         m_link.phy = m_link.pending_phy_update.phy;
         m_link.pending_phy_update.valid = false;
+        if ((m_ctrl_rt.central_ctrl_proc.procedure == BLE_GAP_CTRL_PROC_PHY_UPDATE) &&
+            (m_ctrl_rt.central_ctrl_proc.state == BLE_CENTRAL_CTRL_PROC_STATE_WAIT_INSTANT))
+        {
+            controller_central_ctrl_proc_reset();
+        }
         (void)ble_evt_notify_gap(BLE_GAP_EVT_PHY_UPDATE_IND);
+        controller_central_auto_ctrl_complete(BLE_GAP_CTRL_PROC_PHY_UPDATE);
     }
 
     if (m_link.role == BLE_GAP_ROLE_CENTRAL)
@@ -741,12 +942,17 @@ void controller_prepare_connected_link(const ble_connect_req_pdu_t *p_req,
                              ((uint32_t)p_req->ll_data.crc_init[2] << 16);
     m_link.packet.max_tx_octets = BLE_LL_DATA_LEN_DEFAULT_OCTETS;
     m_link.packet.max_rx_octets = BLE_LL_DATA_LEN_DEFAULT_OCTETS;
+    m_link.packet.max_tx_time_us = BLE_LL_DATA_LEN_DEFAULT_TIME;
+    m_link.packet.max_rx_time_us = BLE_LL_DATA_LEN_DEFAULT_TIME;
     m_link.phy.tx_phy = BLE_LL_PHY_1M;
     m_link.phy.rx_phy = BLE_LL_PHY_1M;
     m_ctrl_rt.tx_unacked = false;
+    m_ctrl_rt.has_pending_conn_ctrl_rsp_pdu = false;
+    m_ctrl_rt.has_pending_conn_ctrl_pdu = false;
     m_ctrl_rt.has_pending_conn_tx_pdu = false;
     m_ctrl_rt.conn_rx_process_pending = false;
     m_ctrl_rt.conn_radio_phase = BLE_CONN_RADIO_PHASE_IDLE;
+    controller_central_state_reset();
     controller_reset_conn_bcmatch_state();
     ble_gatt_server_reset_connection_state();
     ble_gatt_client_reset_connection_state();
@@ -761,6 +967,10 @@ void controller_prepare_connected_link(const ble_connect_req_pdu_t *p_req,
                                     m_link.packet.access_address,
                                     m_link.packet.crc_init,
                                     (uint32_t)&m_ctrl_rt.conn_rx_pdu);
+    if (role == BLE_GAP_ROLE_CENTRAL)
+    {
+        controller_central_auto_ctrl_start();
+    }
 }
 
 static void radio_evt_handler(radio_event_t evt)
