@@ -79,25 +79,32 @@ layers so packet flow is easy to follow in code.
 
 ## Public API
 
-Main application-facing entry points:
+Main application-facing entry points include:
 
-- `ble_stack_init()`
-- `ble_gap_register_evt_handler()`
-- `ble_adv_init()`
-- `ble_gap_set_device_name()`
-- `ble_gap_set_conn_params()`
-- `ble_gap_request_conn_params_update()`
-- `ble_gap_initiate_conn_update()`
-- `ble_uuid_set_vendor_base()`
-- `ble_gatt_server_init()`
-- `ble_gatt_server_register_evt_handler()`
-- `ble_gatt_client_register_evt_handler()`
-- `ble_start_advertising()`
-- `ble_notify_characteristic()`
-- `ble_is_connected()`
+- Core and GAP:
+  `ble_stack_init()`, `ble_gap_register_evt_handler()`,
+  `ble_register_scan_report_handler()`, `ble_adv_init()`, `ble_scan_init()`,
+  `ble_start_advertising()`, `ble_start_scanning()`, `ble_stop_scanning()`,
+  `ble_gap_set_scan_filter()`, `ble_gap_clear_scan_filter()`,
+  `ble_gap_set_device_name()`, `ble_gap_set_conn_params()`,
+  `ble_gap_connect()`, `ble_gap_request_conn_params_update()`,
+  `ble_gap_initiate_conn_update()`, `ble_disconnect()`,
+  `ble_uuid_set_vendor_base()`, and `ble_is_connected()`
+- GATT server:
+  `ble_gatt_server_init()`, `ble_gatt_server_register_evt_handler()`,
+  `ble_notify_characteristic()`, and `ble_indicate_characteristic()`
+- GATT client:
+  `ble_gatt_client_register_evt_handler()`, `ble_gatt_client_is_busy()`,
+  `ble_gatt_client_exchange_mtu()`,
+  `ble_gatt_client_discover_primary_services()`,
+  `ble_gatt_client_discover_primary_services_by_uuid()`,
+  `ble_gatt_client_discover_characteristics()`,
+  `ble_gatt_client_discover_descriptors()`, `ble_gatt_client_read()`,
+  `ble_gatt_client_write()`, and `ble_gatt_client_write_cccd()`
 
-See [nrf_ble.h](stack/include/nrf_ble.h) and
-[ble_gatt_server.h](stack/include/ble_gatt_server.h) for the full public
+See [nrf_ble.h](stack/include/nrf_ble.h),
+[ble_gatt_server.h](stack/include/ble_gatt_server.h), and
+[ble_gatt_client.h](stack/include/ble_gatt_client.h) for the full public
 interface.
 
 ## Architecture At A Glance
