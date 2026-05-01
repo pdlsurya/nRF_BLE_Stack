@@ -139,7 +139,7 @@ static void ble_state_set(bool connected)
 static void start_advertising(void)
 {
   ble_state_set(false);
-  ble_start_advertising();
+  ble_gap_start_advertising();
   log_printf("BLE advertising started\n");
 }
 
@@ -169,19 +169,19 @@ static void measurement_timer_handler(void *p_context)
 {
   (void)p_context;
 
-  if (!ble_is_connected())
+  if (!ble_gap_is_connected())
   {
     return;
   }
 
   m_counter_char_value++;
-  if (ble_indicate_characteristic(&m_custom_characteristics[0]))
+  if (ble_gatt_server_indicate_characteristic(&m_custom_characteristics[0]))
   {
     log_printf("BLE GATT: indicated counter=%u\n", (unsigned int)m_counter_char_value);
     return;
   }
 
-  if (ble_notify_characteristic(&m_custom_characteristics[0]))
+  if (ble_gatt_server_notify_characteristic(&m_custom_characteristics[0]))
   {
     log_printf("BLE GATT: notified counter=%u\n", (unsigned int)m_counter_char_value);
   }
@@ -309,7 +309,7 @@ int main(void)
   ble_gap_set_device_name(m_dev_name);
   ble_gap_set_conn_params(&m_gap_conn_params);
   ble_uuid_set_vendor_base(m_custom_uuid_base);
-  ble_adv_init(&m_adv_config);
+  ble_gap_adv_init(&m_adv_config);
   APP_ERROR_CHECK_BOOL(ble_gatt_server_init(m_custom_services,
                                             (uint8_t)(sizeof(m_custom_services) / sizeof(m_custom_services[0]))));
 

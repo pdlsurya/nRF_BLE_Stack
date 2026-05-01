@@ -10,23 +10,9 @@
  */
 
 #include "ble_runtime_internal.h"
+#include "ble_gatt_client_internal.h"
 
 #include "app_error.h"
-
-bool ble_is_connected(void)
-{
-    return m_link.connected;
-}
-
-void ble_gap_register_evt_handler(ble_gap_evt_handler_t handler)
-{
-    m_gap_evt_handler = handler;
-}
-
-void ble_register_scan_report_handler(ble_gap_scan_report_handler_t handler)
-{
-    m_scan_report_handler = handler;
-}
 
 void ble_stack_init(ble_gap_role_t role)
 {
@@ -54,5 +40,6 @@ void ble_stack_init(ble_gap_role_t role)
 
     ble_evt_dispatch_init();
     controller_runtime_init();
-    ble_gatt_client_init();
+    ble_conn_param_update_timer_init();
+    ble_gatt_client_reset_connection_state();
 }

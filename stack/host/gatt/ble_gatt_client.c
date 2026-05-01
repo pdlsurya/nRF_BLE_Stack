@@ -10,7 +10,8 @@
  */
 
 #include "ble_runtime_internal.h"
-#include "ble_att_defs.h"
+#include "ble_att_internal.h"
+#include "ble_gatt_client_internal.h"
 
 #include <string.h>
 
@@ -193,8 +194,8 @@ static bool gatt_client_queue_discover_descriptors(uint16_t start_handle)
     return gatt_client_queue_att(req, sizeof(req));
 }
 
-static void gatt_client_handle_service_rsp(const uint8_t *p_att,
-                                           uint16_t att_len)
+static void gatt_client_handle_read_by_group_type_rsp(const uint8_t *p_att,
+                                                      uint16_t att_len)
 {
     uint8_t item_len;
     uint16_t offset;
@@ -246,8 +247,8 @@ static void gatt_client_handle_service_rsp(const uint8_t *p_att,
     }
 }
 
-static void gatt_client_handle_find_type_service_rsp(const uint8_t *p_att,
-                                                     uint16_t att_len)
+static void gatt_client_handle_find_by_type_value_rsp(const uint8_t *p_att,
+                                                      uint16_t att_len)
 {
     uint16_t offset;
     uint16_t last_end_handle = 0U;
@@ -290,8 +291,8 @@ static void gatt_client_handle_find_type_service_rsp(const uint8_t *p_att,
     }
 }
 
-static void gatt_client_handle_characteristic_rsp(const uint8_t *p_att,
-                                                  uint16_t att_len)
+static void gatt_client_handle_read_by_type_rsp(const uint8_t *p_att,
+                                                uint16_t att_len)
 {
     uint8_t item_len;
     uint16_t offset;
@@ -344,8 +345,8 @@ static void gatt_client_handle_characteristic_rsp(const uint8_t *p_att,
     }
 }
 
-static void gatt_client_handle_descriptor_rsp(const uint8_t *p_att,
-                                              uint16_t att_len)
+static void gatt_client_handle_find_information_rsp(const uint8_t *p_att,
+                                                    uint16_t att_len)
 {
     uint8_t format;
     uint8_t item_len;
@@ -512,7 +513,7 @@ static void gatt_client_handle_error_rsp(const uint8_t *p_att,
     gatt_client_clear_procedure();
 }
 
-void ble_gatt_client_init(void)
+static void ble_gatt_client_init(void)
 {
     (void)memset(&m_client, 0, sizeof(m_client));
     m_client.mtu = BLE_ATT_MTU_DEFAULT;
@@ -820,21 +821,21 @@ uint16_t ble_gatt_client_process_pdu(const uint8_t *p_att,
     case BLE_ATT_OP_FIND_INFORMATION_RESPONSE:
         if (m_client.procedure == BLE_GATT_CLIENT_PROC_DISCOVER_DESCRIPTORS)
         {
-            gatt_client_handle_descriptor_rsp(p_att, att_len);
+            gatt_client_handle_find_information_rsp(p_att, att_len);
         }
         return 0U;
 
     case BLE_ATT_OP_FIND_BY_TYPE_VALUE_RESPONSE:
         if (m_client.procedure == BLE_GATT_CLIENT_PROC_DISCOVER_PRIMARY_SERVICES_BY_UUID)
         {
-            gatt_client_handle_find_type_service_rsp(p_att, att_len);
+            gatt_client_handle_find_by_type_value_rsp(p_att, att_len);
         }
         return 0U;
 
     case BLE_ATT_OP_READ_BY_TYPE_RESPONSE:
         if (m_client.procedure == BLE_GATT_CLIENT_PROC_DISCOVER_CHARACTERISTICS)
         {
-            gatt_client_handle_characteristic_rsp(p_att, att_len);
+            gatt_client_handle_read_by_type_rsp(p_att, att_len);
         }
         return 0U;
 
@@ -848,7 +849,7 @@ uint16_t ble_gatt_client_process_pdu(const uint8_t *p_att,
     case BLE_ATT_OP_READ_BY_GROUP_TYPE_RESPONSE:
         if (m_client.procedure == BLE_GATT_CLIENT_PROC_DISCOVER_PRIMARY_SERVICES)
         {
-            gatt_client_handle_service_rsp(p_att, att_len);
+            gatt_client_handle_read_by_group_type_rsp(p_att, att_len);
         }
         return 0U;
 

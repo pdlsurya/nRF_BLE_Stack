@@ -108,7 +108,7 @@ static void host_build_scan_rsp_pdu(void)
     m_ctrl_rt.scan_rsp_pdu.payload_length = BLE_ADV_ADVERTISER_ADDRESS_LEN;
 }
 
-bool controller_scan_request_targets_us(const ble_scan_req_pdu_t *p_req)
+bool controller_peripheral_scan_request_targets_us(const ble_scan_req_pdu_t *p_req)
 {
     if (p_req == NULL)
     {
@@ -133,7 +133,7 @@ bool controller_scan_request_targets_us(const ble_scan_req_pdu_t *p_req)
     return memcmp(p_req->advertiser_address, m_ctrl_rt.adv_address, sizeof(m_ctrl_rt.adv_address)) == 0;
 }
 
-bool controller_connect_request_targets_us(const ble_connect_req_pdu_t *p_req)
+bool controller_peripheral_connect_request_targets_us(const ble_connect_req_pdu_t *p_req)
 {
     const uint8_t expected_payload_len = (uint8_t)(sizeof(((ble_connect_req_pdu_t *)0)->initiator_address) + sizeof(((ble_connect_req_pdu_t *)0)->advertiser_address) + sizeof(((ble_connect_req_pdu_t *)0)->ll_data));
 
@@ -160,18 +160,18 @@ bool controller_connect_request_targets_us(const ble_connect_req_pdu_t *p_req)
     return memcmp(p_req->advertiser_address, m_ctrl_rt.adv_address, sizeof(m_ctrl_rt.adv_address)) == 0;
 }
 
-void controller_adv_timer_start(uint32_t interval_ms)
+static void controller_peripheral_adv_timer_start(uint32_t interval_ms)
 {
     APP_ERROR_CHECK(app_timer_stop(m_adv_timer_id));
     APP_ERROR_CHECK(app_timer_start(m_adv_timer_id, APP_TIMER_TICKS(interval_ms), NULL));
 }
 
-void controller_adv_timer_stop(void)
+static void controller_peripheral_adv_timer_stop(void)
 {
     APP_ERROR_CHECK(app_timer_stop(m_adv_timer_id));
 }
 
-static void controller_adv_timer_handler(void *p_context)
+static void controller_peripheral_adv_timer_handler(void *p_context)
 {
     uint8_t ch;
     uint32_t primask;
@@ -198,7 +198,7 @@ static void controller_adv_timer_handler(void *p_context)
         /* Keep RX open long enough for SCAN_REQ/CONNECT_REQ + margin. */
         nrf_delay_us(BLE_ADV_RX_WINDOW_US);
 
-         primask = irq_lock();
+        primask = irq_lock();
         if (!m_link.connected)
         {
             controller_reset_adv_radio_state();
@@ -208,7 +208,51 @@ static void controller_adv_timer_handler(void *p_context)
     }
 }
 
-void controller_apply_peripheral_connect_request(const ble_connect_req_pdu_t *p_req)
+static void controller_peripheral_reset_conn_bcmatch_state(void)
+{
+    m_ctrl_rt.conn_bcmatch.tx_acked = false;
+    m_ctrl_rt.conn_bcmatch.is_new_packet = false;
+    controller_reset_conn_tx_selection_state();
+}
+
+static void controller_peripheral_prestage_conn_response_from_header(void)
+{
+    const ble_ll_data_header_t *p_rx_header = &m_ctrl_rt.conn_rx_pdu.header;
+    bool tx_acked = m_ctrl_rt.tx_unacked && (p_rx_header->nesn != m_link.packet.tx_sn);
+    bool is_new_packet = (p_rx_header->sn == m_link.packet.next_expected_rx_sn);
+    uint8_t next_expected_rx_sn;
+    uint8_t tx_sn;
+
+    controller_peripheral_reset_conn_bcmatch_state();
+    m_ctrl_rt.conn_bcmatch.tx_acked = tx_acked;
+    m_ctrl_rt.conn_bcmatch.is_new_packet = is_new_packet;
+
+    if (m_ctrl_rt.tx_unacked && !tx_acked)
+    {
+        return;
+    }
+
+    next_expected_rx_sn = m_link.packet.next_expected_rx_sn;
+    tx_sn = m_link.packet.tx_sn;
+
+    if (tx_acked)
+    {
+        tx_sn ^= 1U;
+    }
+
+    if (is_new_packet)
+    {
+        next_expected_rx_sn ^= 1U;
+    }
+
+    if (!controller_load_pending_conn_tx_pdu_for_state(next_expected_rx_sn, tx_sn))
+    {
+        m_ctrl_rt.conn_tx_pdu.header = controller_conn_header_for_state(BLE_LLID_CONTINUATION, next_expected_rx_sn, tx_sn);
+        m_ctrl_rt.conn_tx_pdu.length = 0U;
+    }
+}
+
+static void controller_peripheral_apply_connect_request(const ble_connect_req_pdu_t *p_req)
 {
     ble_gap_addr_t peer_addr = {
         .addr_is_random = (p_req->header.txadd != 0U),
@@ -216,8 +260,8 @@ void controller_apply_peripheral_connect_request(const ble_connect_req_pdu_t *p_
     uint32_t first_event_delay_us;
 
     (void)memcpy(peer_addr.addr, p_req->initiator_address, sizeof(peer_addr.addr));
-    controller_scan_timer_stop();
-    controller_adv_timer_stop();
+    controller_central_scan_timer_stop();
+    controller_peripheral_adv_timer_stop();
     controller_prepare_connected_link(p_req, BLE_GAP_ROLE_PERIPHERAL, &peer_addr);
 
     /* First peripheral listening window starts at transmitWindowOffset; for 0 offset,
@@ -227,13 +271,13 @@ void controller_apply_peripheral_connect_request(const ble_connect_req_pdu_t *p_
     (void)ble_evt_notify_gap(BLE_GAP_EVT_CONNECTED);
 }
 
-void controller_start_connection_event_peripheral(void)
+void controller_peripheral_start_connection_event(void)
 {
     controller_hop_data_channel();
     m_ctrl_rt.conn_rx_pdu.header = (ble_ll_data_header_t){0};
     m_ctrl_rt.conn_rx_pdu.length = 0U;
     m_ctrl_rt.conn_rx_process_pending = false;
-    controller_reset_conn_bcmatch_state();
+    controller_peripheral_reset_conn_bcmatch_state();
     m_ctrl_rt.conn_radio_phase = BLE_CONN_RADIO_PHASE_WAIT_RX_DISABLED;
     radio_enable_interrupt_mask(BLE_RADIO_IRQ_MASK_CONN);
     radio_set_bcc(BLE_LL_DATA_HEADER_BITS);
@@ -264,7 +308,7 @@ void radio_handle_connected_packet_peripheral(void)
     m_ctrl_rt.conn_rx_process_pending = m_ctrl_rt.conn_bcmatch.is_new_packet;
     new_tx_pdu = !m_ctrl_rt.tx_unacked;
     controller_stage_conn_response(new_tx_pdu);
-    controller_reset_conn_bcmatch_state();
+    controller_peripheral_reset_conn_bcmatch_state();
 
     m_link.supervision.started = true;
 }
@@ -280,7 +324,7 @@ void radio_handle_connected_crc_error_peripheral(void)
 
     m_ctrl_rt.conn_next_event_tick_us = controller_conn_next_event_tick_from_anchor(NRF_TIMER0->CC[BLE_CONN_TIMER_CAPTURE_CC_INDEX], current_event_counter);
     controller_conn_timer_schedule_compare();
-    controller_reset_conn_bcmatch_state();
+    controller_peripheral_reset_conn_bcmatch_state();
     m_ctrl_rt.conn_rx_process_pending = false;
     if (m_ctrl_rt.tx_unacked)
     {
@@ -303,10 +347,10 @@ void radio_handle_connected_bcmatch_peripheral(void)
         return;
     }
 
-    controller_prestage_conn_response_from_header();
+    controller_peripheral_prestage_conn_response_from_header();
 }
 
-void controller_handle_connected_disabled_peripheral(void)
+void controller_peripheral_handle_connected_disabled(void)
 {
     if (m_ctrl_rt.conn_radio_phase == BLE_CONN_RADIO_PHASE_IDLE)
     {
@@ -322,7 +366,7 @@ void controller_handle_connected_disabled_peripheral(void)
 
     m_ctrl_rt.conn_radio_phase = BLE_CONN_RADIO_PHASE_IDLE;
     radio_set_shorts(0U);
-    controller_reset_conn_bcmatch_state();
+    controller_peripheral_reset_conn_bcmatch_state();
     if (m_ctrl_rt.conn_rx_process_pending)
     {
         m_ctrl_rt.conn_rx_process_pending = false;
@@ -330,7 +374,7 @@ void controller_handle_connected_disabled_peripheral(void)
     }
 }
 
-void controller_handle_advertising_disabled(void)
+void controller_peripheral_handle_advertising_disabled(void)
 {
     if (m_ctrl_rt.adv_radio_phase == BLE_ADV_RADIO_PHASE_IDLE)
     {
@@ -360,7 +404,7 @@ void controller_handle_advertising_disabled(void)
             m_ctrl_rt.adv_connect_pending = false;
             controller_reset_adv_radio_state();
             radio_disable();
-            controller_apply_peripheral_connect_request(&m_ctrl_rt.adv_rx_pdu.connect_req);
+            controller_peripheral_apply_connect_request(&m_ctrl_rt.adv_rx_pdu.connect_req);
             return;
         }
 
@@ -374,7 +418,7 @@ void controller_handle_advertising_disabled(void)
     }
 }
 
-void controller_start_advertising_internal(void)
+void controller_peripheral_start_advertising_internal(void)
 {
     if (m_host.configured_role != BLE_GAP_ROLE_PERIPHERAL)
     {
@@ -386,14 +430,14 @@ void controller_start_advertising_internal(void)
         return;
     }
 
-    controller_stop_scanning_internal();
+    controller_central_stop_scanning_internal();
     radio_enable_interrupt_mask(BLE_RADIO_IRQ_MASK_ADV);
 
     controller_prepare_radio_common((uint8_t)sizeof(m_ctrl_rt.adv_tx_pdu.payload), m_adv_access_address, m_adv_crc_init, (uint32_t)&m_ctrl_rt.adv_tx_pdu);
-    controller_adv_timer_start(m_host.adv_interval_ms);
+    controller_peripheral_adv_timer_start(m_host.adv_interval_ms);
 }
 
-void controller_adv_timer_init(void)
+void controller_peripheral_adv_timer_init(void)
 {
-    APP_ERROR_CHECK(app_timer_create(&m_adv_timer_id, APP_TIMER_MODE_REPEATED, controller_adv_timer_handler));
+    APP_ERROR_CHECK(app_timer_create(&m_adv_timer_id, APP_TIMER_MODE_REPEATED, controller_peripheral_adv_timer_handler));
 }

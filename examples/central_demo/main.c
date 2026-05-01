@@ -356,7 +356,7 @@ static void start_target_scan(void)
 
     if (ble_gap_set_scan_filter(&m_target_filter))
     {
-        ble_start_scanning();
+        ble_gap_start_scanning();
         log_printf("BLE central scan start\n");
         log_printf("svc uuid=%s\n", uuid_str);
         return;
@@ -607,7 +607,7 @@ int main(void)
     ble_gatt_client_register_evt_handler(gatt_client_evt_handler);
     ble_gap_set_conn_params(&m_gap_conn_params);
     ble_uuid_set_vendor_base(m_custom_uuid_base);
-    ble_scan_init(&m_scan_config);
+    ble_gap_scan_init(&m_scan_config);
 
     gatt_client_uuid_format(&m_target_service_uuid, uuid_str, sizeof(uuid_str));
     log_printf("BLE central demo\n");

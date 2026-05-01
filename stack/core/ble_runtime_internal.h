@@ -16,20 +16,15 @@
 #include <stdint.h>
 
 #include "app_timer.h"
+#include "ble_gap.h"
+#include "ble_gatt_client.h"
+#include "ble_gatt_server.h"
+#include "ble_l2cap_internal.h"
 #include "ble_ll_types.h"
-#include "nrf_ble.h"
 #include "radio_driver.h"
 
 #define BLE_GAP_DEVICE_NAME_MAX_LEN 20U
 #define BLE_IDENTITY_SALT 0x434D535456324C39ULL
-#define BLE_L2CAP_CID_ATT 0x0004U
-#define BLE_L2CAP_CID_SIGNALING 0x0005U
-#define BLE_L2CAP_HDR_LEN 4U
-#define BLE_L2CAP_SIG_HDR_LEN 4U
-#define BLE_L2CAP_SIG_CONN_PARAM_UPDATE_REQ 0x12U
-#define BLE_L2CAP_SIG_CONN_PARAM_UPDATE_RSP 0x13U
-#define BLE_L2CAP_SIG_CONN_PARAM_ACCEPTED 0x0000U
-#define BLE_L2CAP_SIG_CONN_PARAM_REJECTED 0x0001U
 #define BLE_ADV_RX_WINDOW_US 1500U
 #define BLE_CONN_EVENT_GUARD_US 5000U
 #define BLE_CONN_TIMER_PRESCALER 4U
@@ -45,6 +40,7 @@
 #define BLE_LL_DATA_LEN_MAX_TIME 2120U
 #define BLE_LL_CTRL_CONN_UPDATE_WIN_SIZE_UNITS 1U
 #define BLE_LL_CTRL_INSTANT_OFFSET_EVENTS 6U
+#define BLE_CONN_TX_L2CAP_QUEUE_DEPTH 4U
 
 #define BLE_LL_CTRL_CONN_UPDATE_IND 0x00U
 #define BLE_LL_CTRL_CHANNEL_MAP_IND 0x01U
@@ -241,6 +237,14 @@ typedef struct
 
 typedef struct
 {
+    ble_ll_data_raw_pdu_t q[BLE_CONN_TX_L2CAP_QUEUE_DEPTH];
+    uint8_t ridx;
+    uint8_t widx;
+    uint8_t count;
+} ble_conn_l2cap_tx_queue_t;
+
+typedef struct
+{
     ble_ll_adv_pdu_t adv_tx_pdu;
     ble_scan_rsp_pdu_t scan_rsp_pdu;
     ble_adv_rx_pdu_t adv_rx_pdu;
@@ -251,7 +255,7 @@ typedef struct
     ble_ll_data_raw_pdu_t pending_conn_ctrl_pdu;
     ble_ll_data_raw_pdu_t conn_tx_pdu;
     ble_ll_data_raw_pdu_t last_conn_tx_pdu;
-    ble_ll_data_raw_pdu_t pending_conn_tx_pdu;
+    ble_conn_l2cap_tx_queue_t l2cap_tx_queue;
     uint8_t adv_address[6];
     uint8_t adv_txadd;
     uint8_t scan_channel_index;
@@ -266,7 +270,6 @@ typedef struct
     bool tx_unacked;
     bool has_pending_conn_ctrl_rsp_pdu;
     bool has_pending_conn_ctrl_pdu;
-    bool has_pending_conn_tx_pdu;
     bool conn_rx_process_pending;
     uint8_t selected_conn_tx_source;
     ble_adv_radio_phase_t adv_radio_phase;
@@ -343,18 +346,18 @@ bool ble_uuid_is_valid(const ble_uuid_t *p_uuid);
 uint16_t ble_uuid_encoded_len(const ble_uuid_t *p_uuid);
 bool ble_uuid_encode(const ble_uuid_t *p_uuid, uint8_t *p_dst);
 bool ble_uuid_matches_bytes(const ble_uuid_t *p_uuid, const uint8_t *p_uuid_bytes, uint16_t uuid_len);
+void ble_conn_param_update_timer_init(void);
+void ble_conn_param_update_timer_start(void);
+void ble_conn_param_update_timer_stop(void);
 void controller_load_identity_address(void);
 
 void controller_runtime_init(void);
 bool controller_queue_l2cap_payload(uint16_t cid, const uint8_t *p_payload, uint16_t payload_len);
-bool controller_initiate_conn_update(const ble_gap_conn_params_t *p_params);
-void controller_start_advertising_internal(void);
-void controller_stop_scanning_internal(void);
-void controller_start_scanning_internal(void);
-bool controller_start_connecting(void);
+bool controller_central_initiate_conn_update(const ble_gap_conn_params_t *p_params);
+void controller_peripheral_start_advertising_internal(void);
+void controller_central_stop_scanning_internal(void);
+void controller_central_start_scanning_internal(void);
+bool controller_central_start_connecting(void);
 void controller_disconnect_internal(void);
-void ble_gatt_client_init(void);
-void ble_gatt_client_reset_connection_state(void);
-uint16_t ble_gatt_client_process_pdu(const uint8_t *p_att, uint16_t att_len, uint8_t *p_rsp, uint16_t rsp_max_len);
 
 #endif /* BLE_RUNTIME_INTERNAL_H__ */

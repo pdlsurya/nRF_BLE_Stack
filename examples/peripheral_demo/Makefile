@@ -71,7 +71,7 @@ SRC_FILES += \
   $(BLE_STACK_DIR)/stack/controller/ble_controller_peripheral.c\
   $(BLE_STACK_DIR)/stack/core/ble_stack.c\
   $(BLE_STACK_DIR)/stack/host/gap/ble_gap.c\
-  $(BLE_STACK_DIR)/stack/host/gatt/ble_gatt_api.c\
+  $(BLE_STACK_DIR)/stack/host/l2cap/ble_l2cap.c\
   $(BLE_STACK_DIR)/stack/host/gatt/ble_gatt_client.c\
   $(BLE_STACK_DIR)/stack/host/gatt/ble_gatt_server.c
 
@@ -85,6 +85,8 @@ INC_FOLDERS += \
   $(BLE_STACK_DIR)/stack/include \
   $(BLE_STACK_DIR)/stack/core \
   $(BLE_STACK_DIR)/stack/controller \
+  $(BLE_STACK_DIR)/stack/host/gatt \
+  $(BLE_STACK_DIR)/stack/host/l2cap \
   $(BLE_STACK_DIR)/stack/radio \
   $(SDK_ROOT)/components/libraries/timer \
   $(SDK_ROOT)/components/libraries/fifo \

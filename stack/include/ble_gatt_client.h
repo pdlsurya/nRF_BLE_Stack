@@ -15,7 +15,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "ble_att_defs.h"
+#include "ble_att.h"
 #include "ble_uuid.h"
 
 typedef enum

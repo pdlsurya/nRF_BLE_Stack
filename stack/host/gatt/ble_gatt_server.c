@@ -13,6 +13,8 @@
 
 #include <string.h>
 
+#include "ble_att_internal.h"
+#include "ble_gatt_server_internal.h"
 #include "ble_runtime_internal.h"
 
 #define BLE_ATT_PERM_READ 0x01U
@@ -943,7 +945,7 @@ static uint16_t ble_gatt_server_build_value_pdu(uint16_t value_handle,
     return (uint16_t)(3U + value_len);
 }
 
-uint16_t ble_gatt_server_build_notification(uint16_t value_handle, uint8_t *p_att, uint16_t max_len)
+static uint16_t ble_gatt_server_build_notification(uint16_t value_handle, uint8_t *p_att, uint16_t max_len)
 {
     return ble_gatt_server_build_value_pdu(value_handle,
                                            BLE_GATT_CHAR_PROP_NOTIFY,
@@ -953,7 +955,7 @@ uint16_t ble_gatt_server_build_notification(uint16_t value_handle, uint8_t *p_at
                                            max_len);
 }
 
-uint16_t ble_gatt_server_build_indication(uint16_t value_handle, uint8_t *p_att, uint16_t max_len)
+static uint16_t ble_gatt_server_build_indication(uint16_t value_handle, uint8_t *p_att, uint16_t max_len)
 {
     if (m_indication_pending)
     {
@@ -968,9 +970,57 @@ uint16_t ble_gatt_server_build_indication(uint16_t value_handle, uint8_t *p_att,
                                            max_len);
 }
 
-void ble_gatt_server_mark_indication_pending(void)
+static void ble_gatt_server_mark_indication_pending(void)
 {
     m_indication_pending = true;
+}
+
+bool ble_gatt_server_notify_characteristic(const ble_gatt_characteristic_t *p_characteristic)
+{
+    uint8_t att_pdu[BLE_ATT_MAX_MTU];
+    uint16_t att_len;
+
+    if (!ble_host_role_is_configured(BLE_GAP_ROLE_PERIPHERAL) ||
+        (p_characteristic == NULL) ||
+        !m_link.connected)
+    {
+        return false;
+    }
+
+    att_len = ble_gatt_server_build_notification(p_characteristic->value_handle, att_pdu, sizeof(att_pdu));
+    if (att_len == 0U)
+    {
+        return false;
+    }
+
+    return controller_queue_l2cap_payload(BLE_L2CAP_CID_ATT, att_pdu, att_len);
+}
+
+bool ble_gatt_server_indicate_characteristic(const ble_gatt_characteristic_t *p_characteristic)
+{
+    uint8_t att_pdu[BLE_ATT_MAX_MTU];
+    uint16_t att_len;
+
+    if (!ble_host_role_is_configured(BLE_GAP_ROLE_PERIPHERAL) ||
+        (p_characteristic == NULL) ||
+        !m_link.connected)
+    {
+        return false;
+    }
+
+    att_len = ble_gatt_server_build_indication(p_characteristic->value_handle, att_pdu, sizeof(att_pdu));
+    if (att_len == 0U)
+    {
+        return false;
+    }
+
+    if (!controller_queue_l2cap_payload(BLE_L2CAP_CID_ATT, att_pdu, att_len))
+    {
+        return false;
+    }
+
+    ble_gatt_server_mark_indication_pending();
+    return true;
 }
 
 uint16_t ble_gatt_server_process_request(const uint8_t *p_att, uint16_t att_len, uint8_t *p_rsp, uint16_t rsp_max_len)

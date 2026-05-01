@@ -213,6 +213,17 @@ void SWI1_EGU1_IRQHandler(void)
         irq_unlock(primask);
 
         if ((evt.kind == BLE_DEFERRED_EVT_KIND_GAP) &&
+            (evt.params.gap_evt.evt_type == BLE_GAP_EVT_CONNECTED))
+        {
+            ble_conn_param_update_timer_start();
+        }
+        else if ((evt.kind == BLE_DEFERRED_EVT_KIND_GAP) &&
+                 (evt.params.gap_evt.evt_type == BLE_GAP_EVT_DISCONNECTED))
+        {
+            ble_conn_param_update_timer_stop();
+        }
+
+        if ((evt.kind == BLE_DEFERRED_EVT_KIND_GAP) &&
             (m_gap_evt_handler != NULL))
         {
             m_gap_evt_handler(&evt.params.gap_evt);

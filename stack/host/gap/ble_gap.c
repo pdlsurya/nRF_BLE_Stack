@@ -10,8 +10,36 @@
  */
 
 #include "ble_runtime_internal.h"
+#include "ble_l2cap_internal.h"
+
+#include "app_error.h"
 
 #include <string.h>
+
+#define BLE_CONN_PARAM_UPDATE_DELAY_MS 6000U
+
+APP_TIMER_DEF(m_conn_param_update_timer_id);
+
+bool ble_gap_is_connected(void)
+{
+    return m_link.connected;
+}
+
+void ble_gap_register_evt_handler(ble_gap_evt_handler_t handler)
+{
+    m_gap_evt_handler = handler;
+}
+
+void ble_gap_register_scan_report_handler(ble_gap_scan_report_handler_t handler)
+{
+    m_scan_report_handler = handler;
+}
+
+static void ble_conn_param_update_timeout_handler(void *p_context)
+{
+    (void)p_context;
+    (void)ble_gap_request_conn_params_update();
+}
 
 static bool ble_gap_conn_params_are_valid(const ble_gap_conn_params_t *p_params)
 {
@@ -129,8 +157,6 @@ void ble_gap_clear_scan_filter(void)
 
 bool ble_gap_request_conn_params_update(void)
 {
-    uint8_t sig_pdu[BLE_L2CAP_SIG_HDR_LEN + 8U];
-
     if (!ble_host_role_is_configured(BLE_GAP_ROLE_PERIPHERAL) ||
         !m_link.connected ||
         !m_host.preferred_conn_params_valid)
@@ -138,20 +164,34 @@ bool ble_gap_request_conn_params_update(void)
         return false;
     }
 
-    sig_pdu[0] = BLE_L2CAP_SIG_CONN_PARAM_UPDATE_REQ;
-    m_host.next_l2cap_sig_identifier++;
-    if (m_host.next_l2cap_sig_identifier == 0U)
-    {
-        m_host.next_l2cap_sig_identifier = 1U;
-    }
-    sig_pdu[1] = m_host.next_l2cap_sig_identifier;
-    u16_encode(8U, &sig_pdu[2]);
-    u16_encode(m_host.preferred_conn_params.min_conn_interval_1p25ms, &sig_pdu[4]);
-    u16_encode(m_host.preferred_conn_params.max_conn_interval_1p25ms, &sig_pdu[6]);
-    u16_encode(m_host.preferred_conn_params.slave_latency, &sig_pdu[8]);
-    u16_encode(m_host.preferred_conn_params.supervision_timeout_10ms, &sig_pdu[10]);
+    return ble_l2cap_queue_conn_param_update_req(&m_host.preferred_conn_params);
+}
 
-    return controller_queue_l2cap_payload(BLE_L2CAP_CID_SIGNALING, sig_pdu, sizeof(sig_pdu));
+void ble_conn_param_update_timer_init(void)
+{
+    APP_ERROR_CHECK(app_timer_create(&m_conn_param_update_timer_id,
+                                     APP_TIMER_MODE_SINGLE_SHOT,
+                                     ble_conn_param_update_timeout_handler));
+}
+
+void ble_conn_param_update_timer_start(void)
+{
+    if (!ble_host_role_is_configured(BLE_GAP_ROLE_PERIPHERAL) ||
+        !m_link.connected ||
+        !m_host.preferred_conn_params_valid)
+    {
+        return;
+    }
+
+    APP_ERROR_CHECK(app_timer_stop(m_conn_param_update_timer_id));
+    APP_ERROR_CHECK(app_timer_start(m_conn_param_update_timer_id,
+                                    APP_TIMER_TICKS(BLE_CONN_PARAM_UPDATE_DELAY_MS),
+                                    NULL));
+}
+
+void ble_conn_param_update_timer_stop(void)
+{
+    APP_ERROR_CHECK(app_timer_stop(m_conn_param_update_timer_id));
 }
 
 bool ble_gap_initiate_conn_update(const ble_gap_conn_params_t *p_params)
@@ -162,10 +202,10 @@ bool ble_gap_initiate_conn_update(const ble_gap_conn_params_t *p_params)
         return false;
     }
 
-    return controller_initiate_conn_update(p_params);
+    return controller_central_initiate_conn_update(p_params);
 }
 
-void ble_adv_init(const ble_adv_config_t *p_config)
+void ble_gap_adv_init(const ble_adv_config_t *p_config)
 {
     if (!ble_host_role_is_configured(BLE_GAP_ROLE_PERIPHERAL))
     {
@@ -193,7 +233,7 @@ void ble_adv_init(const ble_adv_config_t *p_config)
     }
 }
 
-void ble_scan_init(const ble_scan_config_t *p_config)
+void ble_gap_scan_init(const ble_scan_config_t *p_config)
 {
     if (!ble_host_role_is_configured(BLE_GAP_ROLE_CENTRAL))
     {
@@ -213,34 +253,34 @@ void ble_scan_init(const ble_scan_config_t *p_config)
     }
 }
 
-void ble_start_advertising(void)
+void ble_gap_start_advertising(void)
 {
     if (!ble_host_role_is_configured(BLE_GAP_ROLE_PERIPHERAL))
     {
         return;
     }
 
-    controller_start_advertising_internal();
+    controller_peripheral_start_advertising_internal();
 }
 
-void ble_start_scanning(void)
+void ble_gap_start_scanning(void)
 {
     if (!ble_host_role_is_configured(BLE_GAP_ROLE_CENTRAL))
     {
         return;
     }
 
-    controller_start_scanning_internal();
+    controller_central_start_scanning_internal();
 }
 
-void ble_stop_scanning(void)
+void ble_gap_stop_scanning(void)
 {
     if (!ble_host_role_is_configured(BLE_GAP_ROLE_CENTRAL))
     {
         return;
     }
 
-    controller_stop_scanning_internal();
+    controller_central_stop_scanning_internal();
 }
 
 bool ble_gap_connect(const ble_gap_addr_t *p_peer_addr)
@@ -267,10 +307,10 @@ bool ble_gap_connect(const ble_gap_addr_t *p_peer_addr)
         return false;
     }
 
-    return controller_start_connecting();
+    return controller_central_start_connecting();
 }
 
-void ble_disconnect(void)
+void ble_gap_disconnect(void)
 {
     controller_disconnect_internal();
 }

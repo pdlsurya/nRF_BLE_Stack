@@ -46,7 +46,7 @@ uint8_t controller_central_ctrl_proc_request_opcode(ble_gap_ctrl_procedure_t pro
     }
 }
 
-static bool controller_request_feature_exchange(void)
+static bool controller_central_request_feature_exchange(void)
 {
     uint8_t pdu[9];
 
@@ -71,7 +71,7 @@ static bool controller_request_feature_exchange(void)
     return true;
 }
 
-static bool controller_request_data_length_update(void)
+static bool controller_central_request_data_length_update(void)
 {
     uint8_t pdu[9];
 
@@ -97,7 +97,7 @@ static bool controller_request_data_length_update(void)
     return true;
 }
 
-static bool controller_request_phy_update(uint8_t tx_phys, uint8_t rx_phys)
+static bool controller_central_request_phy_update(uint8_t tx_phys, uint8_t rx_phys)
 {
     uint8_t pdu[3];
     uint8_t requested_tx_phys = (uint8_t)(tx_phys & (BLE_LL_PHY_1M | BLE_LL_PHY_2M));
@@ -126,7 +126,7 @@ static bool controller_request_phy_update(uint8_t tx_phys, uint8_t rx_phys)
     return true;
 }
 
-static void controller_auto_ctrl_advance(void)
+static void controller_central_auto_ctrl_advance(void)
 {
     if ((m_link.role != BLE_GAP_ROLE_CENTRAL) || !m_link.connected)
     {
@@ -136,7 +136,7 @@ static void controller_auto_ctrl_advance(void)
 
     if (m_ctrl_rt.auto_ctrl_stage == BLE_AUTO_CTRL_STAGE_WAIT_FEATURES)
     {
-        if (!controller_request_feature_exchange())
+        if (!controller_central_request_feature_exchange())
         {
             if (m_ctrl_rt.central_ctrl_proc.procedure != BLE_GAP_CTRL_PROC_NONE)
             {
@@ -144,14 +144,14 @@ static void controller_auto_ctrl_advance(void)
             }
 
             m_ctrl_rt.auto_ctrl_stage = BLE_AUTO_CTRL_STAGE_WAIT_DATA_LENGTH;
-            controller_auto_ctrl_advance();
+            controller_central_auto_ctrl_advance();
         }
         return;
     }
 
     if (m_ctrl_rt.auto_ctrl_stage == BLE_AUTO_CTRL_STAGE_WAIT_DATA_LENGTH)
     {
-        if (!controller_request_data_length_update())
+        if (!controller_central_request_data_length_update())
         {
             if (m_ctrl_rt.central_ctrl_proc.procedure != BLE_GAP_CTRL_PROC_NONE)
             {
@@ -159,15 +159,15 @@ static void controller_auto_ctrl_advance(void)
             }
 
             m_ctrl_rt.auto_ctrl_stage = BLE_AUTO_CTRL_STAGE_WAIT_PHY;
-            controller_auto_ctrl_advance();
+            controller_central_auto_ctrl_advance();
         }
         return;
     }
 
     if (m_ctrl_rt.auto_ctrl_stage == BLE_AUTO_CTRL_STAGE_WAIT_PHY)
     {
-        if (!controller_request_phy_update((uint8_t)(BLE_LL_PHY_1M | BLE_LL_PHY_2M),
-                                           (uint8_t)(BLE_LL_PHY_1M | BLE_LL_PHY_2M)))
+        if (!controller_central_request_phy_update((uint8_t)(BLE_LL_PHY_1M | BLE_LL_PHY_2M),
+                                                   (uint8_t)(BLE_LL_PHY_1M | BLE_LL_PHY_2M)))
         {
             if ((m_ctrl_rt.central_ctrl_proc.procedure != BLE_GAP_CTRL_PROC_NONE) ||
                 m_link.pending_phy_update.valid)
@@ -192,7 +192,7 @@ void controller_central_auto_ctrl_start(void)
     }
 
     m_ctrl_rt.auto_ctrl_stage = BLE_AUTO_CTRL_STAGE_WAIT_FEATURES;
-    controller_auto_ctrl_advance();
+    controller_central_auto_ctrl_advance();
 }
 
 void controller_central_auto_ctrl_complete(ble_gap_ctrl_procedure_t procedure)
@@ -207,7 +207,7 @@ void controller_central_auto_ctrl_complete(ble_gap_ctrl_procedure_t procedure)
         (m_ctrl_rt.auto_ctrl_stage == BLE_AUTO_CTRL_STAGE_WAIT_FEATURES))
     {
         m_ctrl_rt.auto_ctrl_stage = BLE_AUTO_CTRL_STAGE_WAIT_DATA_LENGTH;
-        controller_auto_ctrl_advance();
+        controller_central_auto_ctrl_advance();
         return;
     }
 
@@ -215,7 +215,7 @@ void controller_central_auto_ctrl_complete(ble_gap_ctrl_procedure_t procedure)
         (m_ctrl_rt.auto_ctrl_stage == BLE_AUTO_CTRL_STAGE_WAIT_DATA_LENGTH))
     {
         m_ctrl_rt.auto_ctrl_stage = BLE_AUTO_CTRL_STAGE_WAIT_PHY;
-        controller_auto_ctrl_advance();
+        controller_central_auto_ctrl_advance();
         return;
     }
 
@@ -226,7 +226,7 @@ void controller_central_auto_ctrl_complete(ble_gap_ctrl_procedure_t procedure)
     }
 }
 
-bool controller_initiate_conn_update(const ble_gap_conn_params_t *p_params)
+bool controller_central_initiate_conn_update(const ble_gap_conn_params_t *p_params)
 {
     uint8_t pdu[12];
     uint16_t instant;
@@ -293,7 +293,7 @@ uint16_t controller_central_process_phy_rsp(const uint8_t *p_payload, uint8_t le
     return 5U;
 }
 
-static bool controller_scan_addr_matches_filter(const ble_gap_addr_t *p_addr)
+static bool controller_central_scan_addr_matches_filter(const ble_gap_addr_t *p_addr)
 {
     if ((p_addr == NULL) || !m_ctrl_rt.connect_filter_enabled || !m_ctrl_rt.connect_filter.match_addr)
     {
@@ -304,12 +304,12 @@ static bool controller_scan_addr_matches_filter(const ble_gap_addr_t *p_addr)
            (memcmp(p_addr->addr, m_ctrl_rt.connect_filter.addr.addr, sizeof(p_addr->addr)) == 0);
 }
 
-static bool controller_adv_data_next(const uint8_t *p_adv_data,
-                                     uint8_t adv_data_len,
-                                     uint8_t *p_offset,
-                                     uint8_t *p_ad_type,
-                                     const uint8_t **pp_value,
-                                     uint8_t *p_value_len)
+static bool controller_central_adv_data_next(const uint8_t *p_adv_data,
+                                             uint8_t adv_data_len,
+                                             uint8_t *p_offset,
+                                             uint8_t *p_ad_type,
+                                             const uint8_t **pp_value,
+                                             uint8_t *p_value_len)
 {
     uint8_t field_len;
 
@@ -337,7 +337,7 @@ static bool controller_adv_data_next(const uint8_t *p_adv_data,
     return true;
 }
 
-static bool controller_adv_data_matches_name(const uint8_t *p_adv_data, uint8_t adv_data_len)
+static bool controller_central_adv_data_matches_name(const uint8_t *p_adv_data, uint8_t adv_data_len)
 {
     const uint8_t *p_value;
     uint8_t offset = 0U;
@@ -356,7 +356,7 @@ static bool controller_adv_data_matches_name(const uint8_t *p_adv_data, uint8_t 
         return false;
     }
 
-    while (controller_adv_data_next(p_adv_data, adv_data_len, &offset, &ad_type, &p_value, &value_len))
+    while (controller_central_adv_data_next(p_adv_data, adv_data_len, &offset, &ad_type, &p_value, &value_len))
     {
         if ((ad_type != BLE_AD_TYPE_SHORT_LOCAL_NAME) &&
             (ad_type != BLE_AD_TYPE_COMPLETE_LOCAL_NAME))
@@ -374,12 +374,12 @@ static bool controller_adv_data_matches_name(const uint8_t *p_adv_data, uint8_t 
     return false;
 }
 
-static bool controller_adv_data_contains_uuid_bytes(const uint8_t *p_adv_data,
-                                                    uint8_t adv_data_len,
-                                                    const uint8_t *p_uuid_bytes,
-                                                    uint16_t uuid_len,
-                                                    uint8_t ad_type_incomplete,
-                                                    uint8_t ad_type_complete)
+static bool controller_central_adv_data_contains_uuid_bytes(const uint8_t *p_adv_data,
+                                                            uint8_t adv_data_len,
+                                                            const uint8_t *p_uuid_bytes,
+                                                            uint16_t uuid_len,
+                                                            uint8_t ad_type_incomplete,
+                                                            uint8_t ad_type_complete)
 {
     const uint8_t *p_value;
     uint8_t offset = 0U;
@@ -392,7 +392,7 @@ static bool controller_adv_data_contains_uuid_bytes(const uint8_t *p_adv_data,
         return false;
     }
 
-    while (controller_adv_data_next(p_adv_data, adv_data_len, &offset, &ad_type, &p_value, &value_len))
+    while (controller_central_adv_data_next(p_adv_data, adv_data_len, &offset, &ad_type, &p_value, &value_len))
     {
         if ((ad_type != ad_type_incomplete) && (ad_type != ad_type_complete))
         {
@@ -416,30 +416,30 @@ static bool controller_adv_data_contains_uuid_bytes(const uint8_t *p_adv_data,
     return false;
 }
 
-static bool controller_adv_data_contains_service_uuid16(const uint8_t *p_adv_data, uint8_t adv_data_len)
+static bool controller_central_adv_data_contains_service_uuid16(const uint8_t *p_adv_data, uint8_t adv_data_len)
 {
     uint8_t uuid16[BLE_UUID16_LEN];
 
     u16_encode(m_ctrl_rt.connect_filter.service_uuid16, uuid16);
-    return controller_adv_data_contains_uuid_bytes(p_adv_data,
-                                                   adv_data_len,
-                                                   uuid16,
-                                                   BLE_UUID16_LEN,
-                                                   BLE_AD_TYPE_INCOMPLETE_UUID16_LIST,
-                                                   BLE_AD_TYPE_COMPLETE_UUID16_LIST);
+    return controller_central_adv_data_contains_uuid_bytes(p_adv_data,
+                                                           adv_data_len,
+                                                           uuid16,
+                                                           BLE_UUID16_LEN,
+                                                           BLE_AD_TYPE_INCOMPLETE_UUID16_LIST,
+                                                           BLE_AD_TYPE_COMPLETE_UUID16_LIST);
 }
 
-static bool controller_adv_data_contains_service_uuid128(const uint8_t *p_adv_data, uint8_t adv_data_len)
+static bool controller_central_adv_data_contains_service_uuid128(const uint8_t *p_adv_data, uint8_t adv_data_len)
 {
-    return controller_adv_data_contains_uuid_bytes(p_adv_data,
-                                                   adv_data_len,
-                                                   m_ctrl_rt.connect_filter.service_uuid128,
-                                                   BLE_UUID128_LEN,
-                                                   BLE_AD_TYPE_INCOMPLETE_UUID128_LIST,
-                                                   BLE_AD_TYPE_COMPLETE_UUID128_LIST);
+    return controller_central_adv_data_contains_uuid_bytes(p_adv_data,
+                                                           adv_data_len,
+                                                           m_ctrl_rt.connect_filter.service_uuid128,
+                                                           BLE_UUID128_LEN,
+                                                           BLE_AD_TYPE_INCOMPLETE_UUID128_LIST,
+                                                           BLE_AD_TYPE_COMPLETE_UUID128_LIST);
 }
 
-bool controller_scan_filter_matches(const ble_gap_addr_t *p_addr, const ble_adv_rx_pdu_t *p_rx)
+bool controller_central_scan_filter_matches(const ble_gap_addr_t *p_addr, const ble_adv_rx_pdu_t *p_rx)
 {
     const uint8_t *p_adv_data;
     uint8_t adv_data_len;
@@ -450,7 +450,7 @@ bool controller_scan_filter_matches(const ble_gap_addr_t *p_addr, const ble_adv_
     }
 
     if (m_ctrl_rt.connect_filter.match_addr &&
-        !controller_scan_addr_matches_filter(p_addr))
+        !controller_central_scan_addr_matches_filter(p_addr))
     {
         return false;
     }
@@ -461,19 +461,19 @@ bool controller_scan_filter_matches(const ble_gap_addr_t *p_addr, const ble_adv_
     p_adv_data = p_rx->adv.payload;
 
     if (m_ctrl_rt.connect_filter.match_name &&
-        !controller_adv_data_matches_name(p_adv_data, adv_data_len))
+        !controller_central_adv_data_matches_name(p_adv_data, adv_data_len))
     {
         return false;
     }
 
     if (m_ctrl_rt.connect_filter.match_service_uuid16 &&
-        !controller_adv_data_contains_service_uuid16(p_adv_data, adv_data_len))
+        !controller_central_adv_data_contains_service_uuid16(p_adv_data, adv_data_len))
     {
         return false;
     }
 
     if (m_ctrl_rt.connect_filter.match_service_uuid128 &&
-        !controller_adv_data_contains_service_uuid128(p_adv_data, adv_data_len))
+        !controller_central_adv_data_contains_service_uuid128(p_adv_data, adv_data_len))
     {
         return false;
     }
@@ -481,13 +481,13 @@ bool controller_scan_filter_matches(const ble_gap_addr_t *p_addr, const ble_adv_
     return true;
 }
 
-static uint32_t controller_seed_next(uint32_t *p_state)
+static uint32_t controller_central_seed_next(uint32_t *p_state)
 {
     *p_state = (*p_state * 1664525UL) + 1013904223UL;
     return *p_state;
 }
 
-static uint32_t controller_access_address_generate(const ble_gap_addr_t *p_peer_addr)
+static uint32_t controller_central_access_address_generate(const ble_gap_addr_t *p_peer_addr)
 {
     uint32_t seed;
     uint8_t i;
@@ -498,7 +498,7 @@ static uint32_t controller_access_address_generate(const ble_gap_addr_t *p_peer_
         for (i = 0U; i < sizeof(p_peer_addr->addr); i++)
         {
             seed ^= ((uint32_t)p_peer_addr->addr[i]) << ((i % 4U) * 8U);
-            seed = controller_seed_next(&seed);
+            seed = controller_central_seed_next(&seed);
         }
     }
 
@@ -510,7 +510,7 @@ static uint32_t controller_access_address_generate(const ble_gap_addr_t *p_peer_
     return seed;
 }
 
-void controller_build_connect_request(const ble_gap_addr_t *p_peer_addr)
+void controller_central_build_connect_request(const ble_gap_addr_t *p_peer_addr)
 {
     uint32_t access_address;
     uint32_t crc_init;
@@ -526,8 +526,8 @@ void controller_build_connect_request(const ble_gap_addr_t *p_peer_addr)
     (void)memcpy(m_ctrl_rt.connect_req_pdu.initiator_address, m_ctrl_rt.adv_address, sizeof(m_ctrl_rt.connect_req_pdu.initiator_address));
     (void)memcpy(m_ctrl_rt.connect_req_pdu.advertiser_address, p_peer_addr->addr, sizeof(m_ctrl_rt.connect_req_pdu.advertiser_address));
 
-    access_address = controller_access_address_generate(p_peer_addr);
-    crc_init = controller_seed_next(&access_address) & 0x00FFFFFFUL;
+    access_address = controller_central_access_address_generate(p_peer_addr);
+    crc_init = controller_central_seed_next(&access_address) & 0x00FFFFFFUL;
     if (crc_init == 0U)
     {
         crc_init = 0x00ABCDE1UL;
@@ -561,7 +561,7 @@ void controller_build_connect_request(const ble_gap_addr_t *p_peer_addr)
     m_ctrl_rt.connect_req_pdu.ll_data.sca = 0U;
 }
 
-void controller_publish_scan_report(const ble_adv_rx_pdu_t *p_rx)
+void controller_central_publish_scan_report(const ble_adv_rx_pdu_t *p_rx)
 {
     ble_gap_scan_report_t report;
     uint8_t adv_type;
@@ -602,27 +602,27 @@ void controller_publish_scan_report(const ble_adv_rx_pdu_t *p_rx)
     (void)ble_evt_notify_scan_report(&report);
 }
 
-void controller_scan_timer_start(uint32_t interval_ms)
+void controller_central_scan_timer_start(uint32_t interval_ms)
 {
     APP_ERROR_CHECK(app_timer_start(m_scan_timer_id, APP_TIMER_TICKS(interval_ms), NULL));
 }
 
-void controller_scan_timer_stop(void)
+void controller_central_scan_timer_stop(void)
 {
     APP_ERROR_CHECK(app_timer_stop(m_scan_timer_id));
 }
 
-void controller_scan_window_timer_start(uint32_t window_ms)
+void controller_central_scan_window_timer_start(uint32_t window_ms)
 {
     APP_ERROR_CHECK(app_timer_start(m_scan_window_timer_id, APP_TIMER_TICKS(window_ms), NULL));
 }
 
-void controller_scan_window_timer_stop(void)
+void controller_central_scan_window_timer_stop(void)
 {
     APP_ERROR_CHECK(app_timer_stop(m_scan_window_timer_id));
 }
 
-static void controller_scan_window_timeout_handler(void *p_context)
+static void controller_central_scan_window_timeout_handler(void *p_context)
 {
     uint32_t primask;
 
@@ -641,7 +641,7 @@ static void controller_scan_window_timeout_handler(void *p_context)
     irq_unlock(primask);
 }
 
-static void controller_scan_timer_handler(void *p_context)
+static void controller_central_scan_timer_handler(void *p_context)
 {
     uint8_t ch;
 
@@ -663,13 +663,13 @@ static void controller_scan_timer_handler(void *p_context)
     m_ctrl_rt.scan_radio_phase = BLE_SCAN_RADIO_PHASE_WAIT_RX_DISABLED;
     controller_set_mode_with_phy(RADIO_MODE_RX, BLE_LL_PHY_1M);
 
-    controller_scan_window_timer_start(m_host.scan_config.window_ms);
+    controller_central_scan_window_timer_start(m_host.scan_config.window_ms);
 }
 
-void controller_stop_scanning_internal(void)
+void controller_central_stop_scanning_internal(void)
 {
-    controller_scan_timer_stop();
-    controller_scan_window_timer_stop();
+    controller_central_scan_timer_stop();
+    controller_central_scan_window_timer_stop();
     m_ctrl_rt.scanning = false;
     m_ctrl_rt.connect_target_valid = false;
     controller_reset_scan_radio_state();
@@ -680,7 +680,7 @@ void controller_stop_scanning_internal(void)
     }
 }
 
-void controller_start_scanning_internal(void)
+void controller_central_start_scanning_internal(void)
 {
     if (m_link.connected || m_ctrl_rt.scanning)
     {
@@ -694,12 +694,12 @@ void controller_start_scanning_internal(void)
     m_ctrl_rt.scanning = true;
     m_ctrl_rt.scan_channel_index = 0U;
 
-    controller_scan_timer_stop();
-    controller_scan_timer_start(m_host.scan_config.interval_ms);
-    controller_scan_timer_handler(NULL);
+    controller_central_scan_timer_stop();
+    controller_central_scan_timer_start(m_host.scan_config.interval_ms);
+    controller_central_scan_timer_handler(NULL);
 }
 
-bool controller_start_connecting(void)
+bool controller_central_start_connecting(void)
 {
     if (!m_ctrl_rt.connect_filter_enabled || m_link.connected)
     {
@@ -707,11 +707,11 @@ bool controller_start_connecting(void)
     }
 
     m_ctrl_rt.connect_target_valid = false;
-    controller_start_scanning_internal();
+    controller_central_start_scanning_internal();
     return true;
 }
 
-void controller_apply_central_connect_request(void)
+static void controller_central_apply_connect_request(void)
 {
     uint32_t first_event_delay_us;
 
@@ -725,7 +725,7 @@ void controller_apply_central_connect_request(void)
     (void)ble_evt_notify_gap(BLE_GAP_EVT_CONNECTED);
 }
 
-void controller_start_connection_event_central(void)
+void controller_central_start_connection_event(void)
 {
     bool new_tx_pdu;
 
@@ -733,7 +733,7 @@ void controller_start_connection_event_central(void)
     m_ctrl_rt.conn_rx_pdu.header = (ble_ll_data_header_t){0};
     m_ctrl_rt.conn_rx_pdu.length = 0U;
     m_ctrl_rt.conn_rx_process_pending = false;
-    controller_reset_conn_bcmatch_state();
+    controller_reset_conn_tx_selection_state();
     m_ctrl_rt.conn_radio_phase = BLE_CONN_RADIO_PHASE_WAIT_TX_DISABLED;
     new_tx_pdu = !m_ctrl_rt.tx_unacked;
 
@@ -771,18 +771,18 @@ void radio_handle_connected_packet_central(void)
     }
 
     m_ctrl_rt.conn_rx_process_pending = is_new_packet;
-    controller_reset_conn_bcmatch_state();
+    controller_reset_conn_tx_selection_state();
     m_link.supervision.started = true;
 }
 
 void radio_handle_connected_crc_error_central(void)
 {
     m_ctrl_rt.conn_rx_process_pending = false;
-    controller_reset_conn_bcmatch_state();
+    controller_reset_conn_tx_selection_state();
     m_link.supervision.started = true;
 }
 
-void controller_handle_connected_disabled_central(void)
+void controller_central_handle_connected_disabled(void)
 {
     if (m_ctrl_rt.conn_radio_phase == BLE_CONN_RADIO_PHASE_IDLE)
     {
@@ -807,7 +807,7 @@ void controller_handle_connected_disabled_central(void)
     }
 }
 
-void controller_handle_scanning_disabled(void)
+void controller_central_handle_scanning_disabled(void)
 {
     if (m_ctrl_rt.scan_radio_phase == BLE_SCAN_RADIO_PHASE_IDLE)
     {
@@ -819,7 +819,7 @@ void controller_handle_scanning_disabled(void)
         if (m_ctrl_rt.scan_connect_pending)
         {
             m_ctrl_rt.scan_connect_pending = false;
-            controller_scan_window_timer_stop();
+            controller_central_scan_window_timer_stop();
             m_ctrl_rt.scan_radio_phase = BLE_SCAN_RADIO_PHASE_WAIT_CONNECT_TX_DISABLED;
             radio_set_packet_ptr((uint32_t)&m_ctrl_rt.connect_req_pdu);
             radio_set_shorts(RADIO_SHORTS_READY_START_Msk | RADIO_SHORTS_END_DISABLE_Msk);
@@ -827,18 +827,18 @@ void controller_handle_scanning_disabled(void)
             return;
         }
 
-        controller_scan_window_timer_stop();
+        controller_central_scan_window_timer_stop();
         controller_reset_scan_radio_state();
         return;
     }
 
-    controller_scan_window_timer_stop();
+    controller_central_scan_window_timer_stop();
     controller_reset_scan_radio_state();
-    controller_apply_central_connect_request();
+    controller_central_apply_connect_request();
 }
 
-void controller_scan_timers_init(void)
+void controller_central_scan_timers_init(void)
 {
-    APP_ERROR_CHECK(app_timer_create(&m_scan_timer_id, APP_TIMER_MODE_REPEATED, controller_scan_timer_handler));
-    APP_ERROR_CHECK(app_timer_create(&m_scan_window_timer_id, APP_TIMER_MODE_SINGLE_SHOT, controller_scan_window_timeout_handler));
+    APP_ERROR_CHECK(app_timer_create(&m_scan_timer_id, APP_TIMER_MODE_REPEATED, controller_central_scan_timer_handler));
+    APP_ERROR_CHECK(app_timer_create(&m_scan_window_timer_id, APP_TIMER_MODE_SINGLE_SHOT, controller_central_scan_window_timeout_handler));
 }

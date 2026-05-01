@@ -15,7 +15,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "ble_att_defs.h"
+#include "ble_att.h"
 #include "ble_uuid.h"
 
 #define BLE_GATT_MAX_SERVICES 4U
@@ -90,11 +90,7 @@ typedef void (*ble_gatt_server_evt_handler_t)(const ble_gatt_server_evt_t *p_evt
 
 void ble_gatt_server_register_evt_handler(ble_gatt_server_evt_handler_t handler);
 bool ble_gatt_server_init(ble_gatt_service_t *p_services, uint8_t service_count);
-void ble_gatt_server_reset_connection_state(void);
-uint16_t ble_gatt_server_build_notification(uint16_t value_handle, uint8_t *p_att, uint16_t max_len);
-uint16_t ble_gatt_server_build_indication(uint16_t value_handle, uint8_t *p_att, uint16_t max_len);
-void ble_gatt_server_mark_indication_pending(void);
-
-uint16_t ble_gatt_server_process_request(const uint8_t *p_att, uint16_t att_len, uint8_t *p_rsp, uint16_t rsp_max_len);
+bool ble_gatt_server_notify_characteristic(const ble_gatt_characteristic_t *p_characteristic);
+bool ble_gatt_server_indicate_characteristic(const ble_gatt_characteristic_t *p_characteristic);
 
 #endif /* BLE_GATT_SERVER_H__ */

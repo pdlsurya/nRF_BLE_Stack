@@ -1,20 +1,18 @@
 /**
- * @file ble_att_defs.h
+ * @file ble_att_internal.h
  * @author Surya Poudel
- * @brief Shared ATT protocol definitions for nRF BLE stack
+ * @brief Internal ATT protocol definitions for nRF BLE stack
  * @version 0.1
- * @date 2026-04-29
+ * @date 2026-05-01
  *
  * @copyright Copyright (c) 2026
  *
  */
 
-#ifndef BLE_ATT_DEFS_H__
-#define BLE_ATT_DEFS_H__
+#ifndef BLE_ATT_INTERNAL_H__
+#define BLE_ATT_INTERNAL_H__
 
-#define BLE_ATT_MTU_DEFAULT 23U
-#define BLE_ATT_MAX_MTU 247U
-#define BLE_ATT_MAX_VALUE_LEN 244U
+#include "ble_att.h"
 
 #define BLE_ATT_ERR_INVALID_HANDLE 0x01U
 #define BLE_ATT_ERR_READ_NOT_PERMITTED 0x02U
@@ -46,4 +44,4 @@
 #define BLE_ATT_OP_HANDLE_VALUE_CONFIRMATION 0x1EU
 #define BLE_ATT_OP_WRITE_COMMAND 0x52U
 
-#endif /* BLE_ATT_DEFS_H__ */
+#endif /* BLE_ATT_INTERNAL_H__ */

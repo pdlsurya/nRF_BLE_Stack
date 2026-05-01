@@ -8,8 +8,8 @@ an application-defined BLE peripheral or central: advertising, passive
 scanning, central connection initiation, connection handling, ATT/GATT
 services and characteristics, GATT client procedures, deferred application
 callbacks, automatic central link-layer feature exchange, automatic central
-data length and PHY updates, and application-driven MTU and connection
-parameter procedures.
+data length and PHY updates, delayed peripheral connection parameter update
+requests, and application-driven MTU and connection parameter procedures.
 
 The stack is intentionally small enough to read end to end. Public API,
 controller logic, ATT/GATT handling, and radio access are kept in separate
@@ -36,19 +36,22 @@ layers so packet flow is easy to follow in code.
 - ATT MTU negotiation up to 247 bytes
 - Legacy advertising validation of both `SCAN_REQ` and `CONNECT_REQ` against
   the local advertiser address and address type
-- Application-driven peripheral connection parameter update requests and
-  central connection update indications
+- Delayed peripheral connection parameter update request when preferred
+  parameters are configured
+- Application-driven peripheral and central connection parameter update APIs
 - Connection-event timing re-anchored from the central packet address using
   `TIMER0` plus fixed PPI capture for better interoperability with active
   central implementations
 - One RX and one TX exchange per connection interval
-- Single pending connected TX slot shared by notifications, ATT responses, and
+- Bounded connected L2CAP TX queue for notifications, ATT responses, and
   signaling PDUs
 
 ## Repository Layout
 
 - `stack/include/nrf_ble.h`
-  Public BLE stack API
+  Umbrella public BLE stack header
+- `stack/include/ble_gap.h`
+  Public GAP types and APIs
 - `stack/include/ble_gatt_server.h`
   Public GATT server types and APIs
 - `stack/include/ble_gatt_client.h`
@@ -58,10 +61,12 @@ layers so packet flow is easy to follow in code.
   deferred event delivery
 - `stack/controller/`
   Shared, central, and peripheral controller/link-layer implementation
-- `stack/include/ble_att_defs.h`
-  Shared ATT protocol definitions
+- `stack/include/ble_att.h`
+  Public ATT size and MTU definitions
 - `stack/host/gap/`
   GAP-facing host APIs
+- `stack/host/l2cap/`
+  Internal L2CAP definitions and signaling helpers
 - `stack/host/gatt/`
   GATT client/server implementation and public GATT helpers
 - `stack/radio/`
@@ -83,16 +88,18 @@ Main application-facing entry points include:
 
 - Core and GAP:
   `ble_stack_init()`, `ble_gap_register_evt_handler()`,
-  `ble_register_scan_report_handler()`, `ble_adv_init()`, `ble_scan_init()`,
-  `ble_start_advertising()`, `ble_start_scanning()`, `ble_stop_scanning()`,
+  `ble_gap_register_scan_report_handler()`, `ble_gap_adv_init()`,
+  `ble_gap_scan_init()`, `ble_gap_start_advertising()`,
+  `ble_gap_start_scanning()`, `ble_gap_stop_scanning()`,
   `ble_gap_set_scan_filter()`, `ble_gap_clear_scan_filter()`,
   `ble_gap_set_device_name()`, `ble_gap_set_conn_params()`,
   `ble_gap_connect()`, `ble_gap_request_conn_params_update()`,
-  `ble_gap_initiate_conn_update()`, `ble_disconnect()`,
-  `ble_uuid_set_vendor_base()`, and `ble_is_connected()`
+  `ble_gap_initiate_conn_update()`, `ble_gap_disconnect()`,
+  `ble_uuid_set_vendor_base()`, and `ble_gap_is_connected()`
 - GATT server:
   `ble_gatt_server_init()`, `ble_gatt_server_register_evt_handler()`,
-  `ble_notify_characteristic()`, and `ble_indicate_characteristic()`
+  `ble_gatt_server_notify_characteristic()`, and
+  `ble_gatt_server_indicate_characteristic()`
 - GATT client:
   `ble_gatt_client_register_evt_handler()`, `ble_gatt_client_is_busy()`,
   `ble_gatt_client_exchange_mtu()`,
@@ -103,6 +110,8 @@ Main application-facing entry points include:
   `ble_gatt_client_write()`, and `ble_gatt_client_write_cccd()`
 
 See [nrf_ble.h](stack/include/nrf_ble.h),
+[ble_gap.h](stack/include/ble_gap.h),
+[ble_uuid.h](stack/include/ble_uuid.h),
 [ble_gatt_server.h](stack/include/ble_gatt_server.h), and
 [ble_gatt_client.h](stack/include/ble_gatt_client.h) for the full public
 interface.
@@ -119,6 +128,9 @@ interface.
   Shared, central, and peripheral controller flow including advertising,
   scanning, connection-event timing, LL control, retransmission behavior, DLE
   parameter tracking, and ATT/L2CAP packet transport.
+- `ble_l2cap.c`
+  Internal L2CAP signaling handling and connection-parameter update request
+  formatting.
 - `ble_gatt_server.c`
   ATT database construction, 16-bit and vendor-base UUID expansion for
   discovery responses, ATT request handling, CCCD tracking, MTU negotiation,
@@ -219,7 +231,7 @@ static void gap_evt_handler(const ble_gap_evt_t *p_evt)
         (void)p_evt->params.slave_latency;
         break;
     case BLE_GAP_EVT_DISCONNECTED:
-        ble_start_advertising();
+        ble_gap_start_advertising();
         break;
     default:
         break;
@@ -247,9 +259,9 @@ int main(void)
         .supervision_timeout_10ms = MS_TO_10MS_UNITS(720U),
     });
     ble_uuid_set_vendor_base(custom_uuid_base);
-    ble_adv_init(&adv_config);
+    ble_gap_adv_init(&adv_config);
     APP_ERROR_CHECK_BOOL(ble_gatt_server_init(services, service_count));
-    ble_start_advertising();
+    ble_gap_start_advertising();
 
     for (;;)
     {
@@ -270,10 +282,10 @@ The normal stack flow is:
    later be requested by the stack.
 4. `ble_uuid_set_vendor_base()` stores the one custom 128-bit base UUID used by
    vendor 16-bit UUIDs.
-5. `ble_adv_init()` stores advertising parameters.
+5. `ble_gap_adv_init()` stores advertising parameters.
 6. `ble_gatt_server_init()` builds the ATT database from the application's
    service table.
-7. `ble_start_advertising()` starts repeated advertising events on channels 37,
+7. `ble_gap_start_advertising()` starts repeated advertising events on channels 37,
    38, and 39.
 8. After each advertising transmission, the controller opens a short RX window
    and listens for a targeted `SCAN_REQ` or `CONNECT_REQ`.
@@ -290,15 +302,18 @@ The normal stack flow is:
 12. If the peer performs the LL length or LL PHY procedures on its own, the
     controller still updates the negotiated packet length or scheduled PHY
     state and reports the resulting GAP events.
-13. ATT MTU exchange and connection parameter updates remain application
-    driven through the public GATT and GAP APIs.
-14. Applications can start GATT discovery immediately after
+13. When preferred peripheral connection parameters are configured, the stack
+    also starts a one-shot delayed L2CAP Connection Parameter Update Request
+    after connect.
+14. ATT MTU exchange and explicit connection parameter update APIs remain
+    available through the public GATT and GAP interfaces.
+15. Applications can start GATT discovery immediately after
     `BLE_GAP_EVT_CONNECTED` when acting as the central; the controller keeps
     automatic central LL control traffic ahead of queued ATT/L2CAP payloads.
-15. Each connection interval is handled as one RX and one TX exchange. Any ATT
+16. Each connection interval is handled as one RX and one TX exchange. Any ATT
     response, notification, or signaling PDU generated from the received packet
     is queued for the next connection event.
-16. Stack-level BLE events and characteristic callbacks are delivered later
+17. Stack-level BLE events and characteristic callbacks are delivered later
     from `SWI1_EGU1_IRQHandler()`.
 
 ## Design Notes
@@ -323,8 +338,9 @@ The normal stack flow is:
 - `radio_driver.c` owns direct `NRF_RADIO` access.
 - The connected data path intentionally uses a simple one-RX / one-TX-per-
   interval model.
-- Notifications, ATT responses, and signaling PDUs share one pending connected
-  TX slot to keep the controller flow small and traceable.
+- Notifications, ATT responses, and signaling PDUs are buffered through a
+  small connected L2CAP TX queue, while LL control response/control traffic
+  keeps dedicated pending slots.
 
 ## Limitations
 
@@ -337,7 +353,7 @@ The normal stack flow is:
 - No long writes or prepare/execute write support
 - Central-side automatic feature exchange, data length update, and PHY update
   are serialized ahead of queued ATT/L2CAP traffic because the controller
-  keeps one pending slot per traffic class
+  keeps dedicated LL control slots ahead of a small L2CAP TX queue
 
 ## License
 
