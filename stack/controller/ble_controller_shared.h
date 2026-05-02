@@ -48,14 +48,7 @@ void controller_central_scan_timer_start(uint32_t interval_ms);
 void controller_central_scan_timer_stop(void);
 void controller_central_scan_window_timer_start(uint32_t window_ms);
 void controller_central_scan_window_timer_stop(void);
-bool controller_adv_type_is_connectable(uint8_t adv_type);
-bool controller_adv_type_is_scannable(uint8_t adv_type);
-bool controller_adv_type_is_reportable(uint8_t adv_type);
-bool controller_radio_has_pending_completion(void);
-bool controller_radio_is_rx_window_active(void);
-void controller_reset_scan_radio_state(void);
 void controller_reset_conn_tx_selection_state(void);
-void controller_reset_adv_radio_state(void);
 bool controller_queue_ll_control_payload(const uint8_t *p_payload, uint8_t payload_len);
 void controller_schedule_conn_update(const uint8_t *p_payload, uint8_t len);
 bool controller_load_pending_conn_tx_pdu_for_state(uint8_t next_expected_rx_sn, uint8_t tx_sn);
@@ -66,17 +59,18 @@ void controller_prepare_connected_link(const ble_connect_req_pdu_t *p_req,
                                        ble_gap_role_t role,
                                        const ble_gap_addr_t *p_peer_addr);
 
-bool controller_peripheral_scan_request_targets_us(const ble_scan_req_pdu_t *p_req);
-bool controller_peripheral_connect_request_targets_us(const ble_connect_req_pdu_t *p_req);
 bool controller_central_scan_filter_matches(const ble_gap_addr_t *p_addr, const ble_adv_rx_pdu_t *p_rx);
 void controller_central_build_connect_request(const ble_gap_addr_t *p_peer_addr);
-void controller_central_publish_scan_report(const ble_adv_rx_pdu_t *p_rx);
+void controller_central_reset_scan_state(void);
+void controller_central_handle_scan_crc_ok(const ble_adv_rx_pdu_t *p_scan_rx);
 void controller_central_state_reset(void);
 void controller_central_auto_ctrl_start(void);
 void controller_central_auto_ctrl_complete(ble_gap_ctrl_procedure_t procedure);
 void controller_central_ctrl_proc_reset(void);
 uint8_t controller_central_ctrl_proc_request_opcode(ble_gap_ctrl_procedure_t procedure);
 uint16_t controller_central_process_phy_rsp(const uint8_t *p_payload, uint8_t len, uint8_t *p_rsp);
+void controller_peripheral_reset_adv_state(void);
+void controller_peripheral_handle_adv_crc_ok(const ble_adv_rx_pdu_t *p_adv_rx);
 void controller_peripheral_start_connection_event(void);
 void controller_central_start_connection_event(void);
 void radio_handle_connected_packet_peripheral(void);
@@ -86,7 +80,7 @@ void radio_handle_connected_crc_error_central(void);
 void radio_handle_connected_bcmatch_peripheral(void);
 void controller_peripheral_handle_connected_disabled(void);
 void controller_central_handle_connected_disabled(void);
-void controller_peripheral_handle_advertising_disabled(void);
-void controller_central_handle_scanning_disabled(void);
+void controller_peripheral_handle_adv_disabled(void);
+void controller_central_handle_scan_disabled(void);
 
 #endif

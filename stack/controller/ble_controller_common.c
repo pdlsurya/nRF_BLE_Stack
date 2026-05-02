@@ -363,48 +363,6 @@ bool controller_queue_ll_control_payload(const uint8_t *p_payload, uint8_t paylo
                                             payload_len);
 }
 
-bool controller_adv_type_is_connectable(uint8_t adv_type)
-{
-    return (adv_type == LL_ADV_IND) || (adv_type == LL_ADV_DIRECT_IND);
-}
-
-bool controller_adv_type_is_scannable(uint8_t adv_type)
-{
-    return (adv_type == LL_ADV_IND) || (adv_type == LL_ADV_SCAN_IND);
-}
-
-bool controller_adv_type_is_reportable(uint8_t adv_type)
-{
-    return (adv_type == LL_ADV_IND) ||
-           (adv_type == LL_ADV_DIRECT_IND) ||
-           (adv_type == LL_ADV_NONCONN_IND) ||
-           (adv_type == LL_ADV_SCAN_IND);
-}
-
-bool controller_radio_has_pending_completion(void)
-{
-    return (NRF_RADIO->EVENTS_END != 0U) ||
-           (NRF_RADIO->EVENTS_CRCOK != 0U) ||
-           (NRF_RADIO->EVENTS_CRCERROR != 0U) ||
-           (NRF_RADIO->EVENTS_DISABLED != 0U);
-}
-
-bool controller_radio_is_rx_window_active(void)
-{
-    radio_state_t state = radio_get_state();
-
-    return (state == RX_RU) ||
-           (state == RX_IDLE) ||
-           (state == RX);
-}
-
-void controller_reset_scan_radio_state(void)
-{
-    m_ctrl_rt.scan_connect_pending = false;
-    m_ctrl_rt.scan_radio_phase = BLE_SCAN_RADIO_PHASE_IDLE;
-    radio_set_shorts(0U);
-}
-
 void controller_reset_conn_tx_selection_state(void)
 {
     m_ctrl_rt.selected_conn_tx_source = BLE_CONN_PENDING_SOURCE_NONE;
@@ -497,14 +455,6 @@ bool controller_load_pending_conn_tx_pdu_for_state(uint8_t next_expected_rx_sn, 
     return false;
 }
 
-void controller_reset_adv_radio_state(void)
-{
-    m_ctrl_rt.adv_scan_rsp_pending = false;
-    m_ctrl_rt.adv_connect_pending = false;
-    m_ctrl_rt.adv_radio_phase = BLE_ADV_RADIO_PHASE_IDLE;
-    radio_set_shorts(0U);
-}
-
 void controller_disconnect_internal(void)
 {
     bool was_connected = m_link.connected;
@@ -535,8 +485,8 @@ void controller_disconnect_internal(void)
     ble_gatt_server_reset_connection_state();
     ble_gatt_client_reset_connection_state();
     radio_disable();
-    controller_reset_adv_radio_state();
-    controller_reset_scan_radio_state();
+    controller_peripheral_reset_adv_state();
+    controller_central_reset_scan_state();
     radio_enable_interrupt_mask(0U);
 
     if (was_connected)
@@ -951,11 +901,11 @@ static void radio_evt_handler(radio_event_t evt)
     {
         if (m_ctrl_rt.adv_radio_phase != BLE_ADV_RADIO_PHASE_IDLE)
         {
-            controller_peripheral_handle_advertising_disabled();
+            controller_peripheral_handle_adv_disabled();
         }
         else if (m_ctrl_rt.scan_radio_phase != BLE_SCAN_RADIO_PHASE_IDLE)
         {
-            controller_central_handle_scanning_disabled();
+            controller_central_handle_scan_disabled();
         }
         return;
     }
@@ -964,24 +914,7 @@ static void radio_evt_handler(radio_event_t evt)
     {
         if (evt == RADIO_EVENT_CRC_OK)
         {
-            ble_gap_addr_t peer_addr = {
-                .addr_is_random = (p_scan_rx->adv.header.txadd != 0U),
-            };
-
-            (void)memcpy(peer_addr.addr, p_scan_rx->adv.mac_address, sizeof(peer_addr.addr));
-            controller_central_publish_scan_report(p_scan_rx);
-
-            if (m_ctrl_rt.connect_filter_enabled &&
-                controller_central_scan_filter_matches(&peer_addr, p_scan_rx) &&
-                controller_adv_type_is_connectable(p_scan_rx->adv.header.pdu_type))
-            {
-                controller_central_scan_timer_stop();
-                m_ctrl_rt.connect_target = peer_addr;
-                m_ctrl_rt.connect_target_valid = true;
-                m_ctrl_rt.scanning = false;
-                controller_central_build_connect_request(&peer_addr);
-                m_ctrl_rt.scan_connect_pending = true;
-            }
+            controller_central_handle_scan_crc_ok(p_scan_rx);
         }
         return;
     }
@@ -992,17 +925,7 @@ static void radio_evt_handler(radio_event_t evt)
     }
     if (evt == RADIO_EVENT_CRC_OK)
     {
-        if ((p_adv_rx->adv.header.pdu_type == LL_SCAN_REQ) && controller_peripheral_scan_request_targets_us(&p_adv_rx->scan_req))
-        {
-            m_ctrl_rt.scan_rsp_pdu.header.rxadd = (uint8_t)(p_adv_rx->scan_req.header.txadd & 0x01U);
-            m_ctrl_rt.adv_scan_rsp_pending = true;
-            return;
-        }
-
-        if ((p_adv_rx->adv.header.pdu_type == LL_CONNECT_REQ) && controller_peripheral_connect_request_targets_us(&p_adv_rx->connect_req))
-        {
-            m_ctrl_rt.adv_connect_pending = true;
-        }
+        controller_peripheral_handle_adv_crc_ok(p_adv_rx);
     }
 }
 
@@ -1014,7 +937,7 @@ void controller_runtime_init(void)
     controller_central_scan_timers_init();
 
     radio_power_on();
-    radio_configure_modecnf0(RADIO_RAMP_UP_FAST, RADIO_DEFAULT_TX_B1);
+    radio_configure_modecnf0(RADIO_RAMP_UP_DEFAULT, RADIO_DEFAULT_TX_B1);
     radio_set_tifs(150U);
     controller_conn_timer_init();
     radio_set_event_handler(radio_evt_handler);

@@ -108,7 +108,7 @@ static void host_build_scan_rsp_pdu(void)
     m_ctrl_rt.scan_rsp_pdu.payload_length = BLE_ADV_ADVERTISER_ADDRESS_LEN;
 }
 
-bool controller_peripheral_scan_request_targets_us(const ble_scan_req_pdu_t *p_req)
+static bool controller_peripheral_scan_request_targets_us(const ble_scan_req_pdu_t *p_req)
 {
     if (p_req == NULL)
     {
@@ -133,7 +133,7 @@ bool controller_peripheral_scan_request_targets_us(const ble_scan_req_pdu_t *p_r
     return memcmp(p_req->advertiser_address, m_ctrl_rt.adv_address, sizeof(m_ctrl_rt.adv_address)) == 0;
 }
 
-bool controller_peripheral_connect_request_targets_us(const ble_connect_req_pdu_t *p_req)
+static bool controller_peripheral_connect_request_targets_us(const ble_connect_req_pdu_t *p_req)
 {
     const uint8_t expected_payload_len = (uint8_t)(sizeof(((ble_connect_req_pdu_t *)0)->initiator_address) + sizeof(((ble_connect_req_pdu_t *)0)->advertiser_address) + sizeof(((ble_connect_req_pdu_t *)0)->ll_data));
 
@@ -171,6 +171,36 @@ static void controller_peripheral_adv_timer_stop(void)
     APP_ERROR_CHECK(app_timer_stop(m_adv_timer_id));
 }
 
+void controller_peripheral_reset_adv_state(void)
+{
+    m_ctrl_rt.adv_scan_rsp_pending = false;
+    m_ctrl_rt.adv_connect_pending = false;
+    m_ctrl_rt.adv_radio_phase = BLE_ADV_RADIO_PHASE_IDLE;
+    radio_set_shorts(0U);
+}
+
+void controller_peripheral_handle_adv_crc_ok(const ble_adv_rx_pdu_t *p_adv_rx)
+{
+    if (p_adv_rx == NULL)
+    {
+        return;
+    }
+
+    if ((p_adv_rx->adv.header.pdu_type == LL_SCAN_REQ) &&
+        controller_peripheral_scan_request_targets_us(&p_adv_rx->scan_req))
+    {
+        m_ctrl_rt.scan_rsp_pdu.header.rxadd = (uint8_t)(p_adv_rx->scan_req.header.txadd & 0x01U);
+        m_ctrl_rt.adv_scan_rsp_pending = true;
+        return;
+    }
+
+    if ((p_adv_rx->adv.header.pdu_type == LL_CONNECT_REQ) &&
+        controller_peripheral_connect_request_targets_us(&p_adv_rx->connect_req))
+    {
+        m_ctrl_rt.adv_connect_pending = true;
+    }
+}
+
 static void controller_peripheral_adv_timer_handler(void *p_context)
 {
     uint8_t ch;
@@ -189,7 +219,7 @@ static void controller_peripheral_adv_timer_handler(void *p_context)
     for (ch = 0U; ch < 3U; ch++)
     {
         (void)memset(&m_ctrl_rt.adv_rx_pdu, 0, sizeof(m_ctrl_rt.adv_rx_pdu));
-        controller_reset_adv_radio_state();
+        controller_peripheral_reset_adv_state();
         radio_set_frequency(m_adv_freq_mhz_offset[ch]);
         radio_set_whiteiv(m_adv_channels[ch]);
         radio_tx_then_rx((uint32_t)&m_ctrl_rt.adv_tx_pdu, (uint32_t)&m_ctrl_rt.adv_rx_pdu);
@@ -201,7 +231,7 @@ static void controller_peripheral_adv_timer_handler(void *p_context)
         primask = irq_lock();
         if (!m_link.connected)
         {
-            controller_reset_adv_radio_state();
+            controller_peripheral_reset_adv_state();
             radio_disable();
         }
         irq_unlock(primask);
@@ -374,7 +404,7 @@ void controller_peripheral_handle_connected_disabled(void)
     }
 }
 
-void controller_peripheral_handle_advertising_disabled(void)
+void controller_peripheral_handle_adv_disabled(void)
 {
     if (m_ctrl_rt.adv_radio_phase == BLE_ADV_RADIO_PHASE_IDLE)
     {
@@ -402,19 +432,19 @@ void controller_peripheral_handle_advertising_disabled(void)
         if (m_ctrl_rt.adv_connect_pending)
         {
             m_ctrl_rt.adv_connect_pending = false;
-            controller_reset_adv_radio_state();
+            controller_peripheral_reset_adv_state();
             radio_disable();
             controller_peripheral_apply_connect_request(&m_ctrl_rt.adv_rx_pdu.connect_req);
             return;
         }
 
-        controller_reset_adv_radio_state();
+        controller_peripheral_reset_adv_state();
         return;
     }
 
     if (m_ctrl_rt.adv_radio_phase == BLE_ADV_RADIO_PHASE_WAIT_SCAN_RSP_TX_DISABLED)
     {
-        controller_reset_adv_radio_state();
+        controller_peripheral_reset_adv_state();
     }
 }
 
