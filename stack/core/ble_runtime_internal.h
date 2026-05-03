@@ -128,20 +128,36 @@ typedef struct
 
 typedef struct
 {
-    ble_gap_role_t configured_role;
     char gap_device_name[BLE_GAP_DEVICE_NAME_MAX_LEN + 1U];
-    uint8_t flags;
     int8_t tx_power;
-    uint16_t adv_interval_ms;
-    ble_scan_config_t scan_config;
-    ble_gap_adv_name_type_t adv_name_type;
-    uint8_t adv_short_name_length;
-    ble_uuid_t included_service_uuid;
     ble_gap_conn_params_t preferred_conn_params;
     bool preferred_conn_params_valid;
     uint8_t vendor_uuid_base[BLE_UUID128_LEN];
     bool vendor_uuid_base_set;
     uint8_t next_l2cap_sig_identifier;
+} ble_host_common_t;
+
+typedef struct
+{
+    uint8_t flags;
+    uint16_t adv_interval_ms;
+    ble_gap_adv_type_t adv_type;
+    ble_gap_adv_name_type_t adv_name_type;
+    uint8_t adv_short_name_length;
+    ble_uuid_t included_service_uuid;
+} ble_host_peripheral_t;
+
+typedef struct
+{
+    ble_scan_config_t scan_config;
+} ble_host_central_t;
+
+typedef struct
+{
+    ble_gap_role_t configured_role;
+    ble_host_common_t common;
+    ble_host_peripheral_t peripheral;
+    ble_host_central_t central;
 } ble_host_t;
 
 typedef enum

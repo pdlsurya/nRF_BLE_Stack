@@ -21,14 +21,23 @@ void ble_stack_init(ble_gap_role_t role)
 
     m_host = (ble_host_t){
         .configured_role = role,
-        .flags = (uint8_t)(BLE_GAP_ADV_FLAG_LE_GENERAL_DISC_MODE |
-                           BLE_GAP_ADV_FLAG_BR_EDR_NOT_SUPPORTED),
-        .adv_interval_ms = BLE_ADV_INTERVAL_MS_DEFAULT,
-        .scan_config = {
-            .interval_ms = BLE_SCAN_INTERVAL_MS_DEFAULT,
-            .window_ms = BLE_SCAN_WINDOW_MS_DEFAULT,
+        .peripheral = {
+            .flags = (uint8_t)(BLE_GAP_ADV_FLAG_LE_GENERAL_DISC_MODE |
+                               BLE_GAP_ADV_FLAG_BR_EDR_NOT_SUPPORTED),
+            .adv_interval_ms = BLE_ADV_INTERVAL_MS_DEFAULT,
+            .adv_type = BLE_GAP_ADV_TYPE_CONNECTABLE_SCANNABLE_UNDIRECTED,
+            .adv_name_type = BLE_GAP_ADV_NAME_FULL,
         },
-        .adv_name_type = BLE_GAP_ADV_NAME_FULL,
+        .central = {
+            .scan_config = {
+                .interval_ms = BLE_SCAN_INTERVAL_MS_DEFAULT,
+                .window_ms = BLE_SCAN_WINDOW_MS_DEFAULT,
+            },
+        },
+        .common = {
+            .tx_power = 0x08,
+        },
+
     };
     m_link = (ble_link_t){0};
     m_ctrl_rt = (ble_ctrl_runtime_t){0};

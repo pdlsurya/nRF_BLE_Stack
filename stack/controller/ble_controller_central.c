@@ -657,11 +657,11 @@ static void controller_central_build_connect_request(const ble_gap_addr_t *p_pee
         crc_init = 0x00ABCDE1UL;
     }
 
-    conn_interval_units = m_host.preferred_conn_params_valid
-                              ? m_host.preferred_conn_params.min_conn_interval_1p25ms
+    conn_interval_units = m_host.common.preferred_conn_params_valid
+                              ? m_host.common.preferred_conn_params.min_conn_interval_1p25ms
                               : BLE_INITIATOR_CONN_INTERVAL_UNITS_DEFAULT;
-    supervision_timeout_units = m_host.preferred_conn_params_valid
-                                    ? m_host.preferred_conn_params.supervision_timeout_10ms
+    supervision_timeout_units = m_host.common.preferred_conn_params_valid
+                                    ? m_host.common.preferred_conn_params.supervision_timeout_10ms
                                     : BLE_INITIATOR_SUPERVISION_TIMEOUT_UNITS_DEFAULT;
 
     m_ctrl_rt.central.connect_req_pdu.payload_length = (uint8_t)(sizeof(m_ctrl_rt.central.connect_req_pdu.initiator_address) +
@@ -676,7 +676,7 @@ static void controller_central_build_connect_request(const ble_gap_addr_t *p_pee
     m_ctrl_rt.central.connect_req_pdu.ll_data.win_size = BLE_INITIATOR_WIN_SIZE_UNITS;
     m_ctrl_rt.central.connect_req_pdu.ll_data.win_offset = BLE_INITIATOR_WIN_OFFSET_UNITS;
     m_ctrl_rt.central.connect_req_pdu.ll_data.interval = conn_interval_units;
-    m_ctrl_rt.central.connect_req_pdu.ll_data.latency = m_host.preferred_conn_params_valid ? m_host.preferred_conn_params.slave_latency : 0U;
+    m_ctrl_rt.central.connect_req_pdu.ll_data.latency = m_host.common.preferred_conn_params_valid ? m_host.common.preferred_conn_params.slave_latency : 0U;
     m_ctrl_rt.central.connect_req_pdu.ll_data.timeout = supervision_timeout_units;
     for (i = 0U; i < 5U; i++)
     {
@@ -839,7 +839,7 @@ static void controller_central_scan_timer_handler(void *p_context)
     m_ctrl_rt.central.scan_radio_phase = BLE_SCAN_RADIO_PHASE_WAIT_RX_DISABLED;
     controller_set_mode_with_phy(RADIO_MODE_RX, BLE_LL_PHY_1M);
 
-    controller_central_scan_window_timer_start(m_host.scan_config.window_ms);
+    controller_central_scan_window_timer_start(m_host.central.scan_config.window_ms);
 }
 
 void controller_central_stop_scanning_internal(void)
@@ -871,7 +871,7 @@ void controller_central_start_scanning_internal(void)
     m_ctrl_rt.central.scan_channel_index = 0U;
 
     controller_central_scan_timer_stop();
-    controller_central_scan_timer_start(m_host.scan_config.interval_ms);
+    controller_central_scan_timer_start(m_host.central.scan_config.interval_ms);
     controller_central_scan_timer_handler(NULL);
 }
 

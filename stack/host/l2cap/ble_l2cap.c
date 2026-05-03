@@ -30,12 +30,12 @@ bool ble_l2cap_queue_conn_param_update_req(const ble_gap_conn_params_t *p_params
     }
 
     sig_pdu[0] = BLE_L2CAP_SIG_CONN_PARAM_UPDATE_REQ;
-    m_host.next_l2cap_sig_identifier++;
-    if (m_host.next_l2cap_sig_identifier == 0U)
+    m_host.common.next_l2cap_sig_identifier++;
+    if (m_host.common.next_l2cap_sig_identifier == 0U)
     {
-        m_host.next_l2cap_sig_identifier = 1U;
+        m_host.common.next_l2cap_sig_identifier = 1U;
     }
-    sig_pdu[1] = m_host.next_l2cap_sig_identifier;
+    sig_pdu[1] = m_host.common.next_l2cap_sig_identifier;
     u16_encode(8U, &sig_pdu[2]);
     u16_encode(p_params->min_conn_interval_1p25ms, &sig_pdu[4]);
     u16_encode(p_params->max_conn_interval_1p25ms, &sig_pdu[6]);

@@ -75,7 +75,7 @@ void ble_gap_set_device_name(const char *p_name)
 {
     size_t name_len;
 
-    m_host.gap_device_name[0] = '\0';
+    m_host.common.gap_device_name[0] = '\0';
 
     if (p_name == NULL)
     {
@@ -88,14 +88,14 @@ void ble_gap_set_device_name(const char *p_name)
         name_len = BLE_GAP_DEVICE_NAME_MAX_LEN;
     }
 
-    (void)memcpy(m_host.gap_device_name, p_name, name_len);
-    m_host.gap_device_name[name_len] = '\0';
+    (void)memcpy(m_host.common.gap_device_name, p_name, name_len);
+    m_host.common.gap_device_name[name_len] = '\0';
 }
 
 void ble_gap_set_conn_params(const ble_gap_conn_params_t *p_params)
 {
-    m_host.preferred_conn_params_valid = false;
-    m_host.preferred_conn_params = (ble_gap_conn_params_t){0};
+    m_host.common.preferred_conn_params_valid = false;
+    m_host.common.preferred_conn_params = (ble_gap_conn_params_t){0};
 
     if (p_params == NULL)
     {
@@ -107,8 +107,8 @@ void ble_gap_set_conn_params(const ble_gap_conn_params_t *p_params)
         return;
     }
 
-    m_host.preferred_conn_params = *p_params;
-    m_host.preferred_conn_params_valid = true;
+    m_host.common.preferred_conn_params = *p_params;
+    m_host.common.preferred_conn_params_valid = true;
 }
 
 bool ble_gap_set_scan_filter(const ble_gap_scan_filter_t *p_filter)
@@ -164,12 +164,12 @@ bool ble_gap_request_conn_params_update(void)
 {
     if (!ble_host_role_is_configured(BLE_GAP_ROLE_PERIPHERAL) ||
         !m_link.connected ||
-        !m_host.preferred_conn_params_valid)
+        !m_host.common.preferred_conn_params_valid)
     {
         return false;
     }
 
-    return ble_l2cap_queue_conn_param_update_req(&m_host.preferred_conn_params);
+    return ble_l2cap_queue_conn_param_update_req(&m_host.common.preferred_conn_params);
 }
 
 void ble_conn_param_update_timer_init(void)
@@ -183,7 +183,7 @@ void ble_conn_param_update_timer_start(void)
 {
     if (!ble_host_role_is_configured(BLE_GAP_ROLE_PERIPHERAL) ||
         !m_link.connected ||
-        !m_host.preferred_conn_params_valid)
+        !m_host.common.preferred_conn_params_valid)
     {
         return;
     }
@@ -210,6 +210,13 @@ bool ble_gap_initiate_conn_update(const ble_gap_conn_params_t *p_params)
     return controller_central_initiate_conn_update(p_params);
 }
 
+static bool ble_gap_adv_type_is_supported(ble_gap_adv_type_t adv_type)
+{
+    return (adv_type == BLE_GAP_ADV_TYPE_CONNECTABLE_SCANNABLE_UNDIRECTED) ||
+           (adv_type == BLE_GAP_ADV_TYPE_NONCONNECTABLE_NONSCANNABLE_UNDIRECTED) ||
+           (adv_type == BLE_GAP_ADV_TYPE_NONCONNECTABLE_SCANNABLE_UNDIRECTED);
+}
+
 void ble_gap_adv_init(const ble_adv_config_t *p_config)
 {
     if (!ble_host_role_is_configured(BLE_GAP_ROLE_PERIPHERAL))
@@ -217,24 +224,27 @@ void ble_gap_adv_init(const ble_adv_config_t *p_config)
         return;
     }
 
-    m_host.flags = (p_config != NULL) ? p_config->flags
-                                      : (uint8_t)(BLE_GAP_ADV_FLAG_LE_GENERAL_DISC_MODE |
-                                                  BLE_GAP_ADV_FLAG_BR_EDR_NOT_SUPPORTED);
-    m_host.tx_power = (p_config != NULL) ? p_config->tx_power : 0;
-    m_host.adv_name_type = (p_config != NULL) ? p_config->name_type : BLE_GAP_ADV_NAME_FULL;
-    m_host.adv_short_name_length = (p_config != NULL) ? p_config->short_name_length : 0U;
-    m_host.adv_interval_ms = ((p_config != NULL) && (p_config->interval_ms != 0U)) ? p_config->interval_ms
-                                                                                     : BLE_ADV_INTERVAL_MS_DEFAULT;
-    m_host.included_service_uuid = ((p_config != NULL) && (p_config->p_included_service_uuid != NULL))
-                                       ? *p_config->p_included_service_uuid
-                                       : (ble_uuid_t)BLE_UUID_NONE_INIT;
-    if (m_host.adv_name_type > BLE_GAP_ADV_NAME_SHORT)
+    m_host.peripheral.flags = (p_config != NULL) ? p_config->flags
+                                                 : (uint8_t)(BLE_GAP_ADV_FLAG_LE_GENERAL_DISC_MODE |
+                                                             BLE_GAP_ADV_FLAG_BR_EDR_NOT_SUPPORTED);
+    m_host.common.tx_power = (p_config != NULL) ? p_config->tx_power : 0;
+    m_host.peripheral.adv_name_type = (p_config != NULL) ? p_config->name_type : BLE_GAP_ADV_NAME_FULL;
+    m_host.peripheral.adv_short_name_length = (p_config != NULL) ? p_config->short_name_length : 0U;
+    m_host.peripheral.adv_type = ((p_config != NULL) && ble_gap_adv_type_is_supported(p_config->adv_type))
+                                     ? p_config->adv_type
+                                     : BLE_GAP_ADV_TYPE_CONNECTABLE_SCANNABLE_UNDIRECTED;
+    m_host.peripheral.adv_interval_ms = ((p_config != NULL) && (p_config->interval_ms != 0U)) ? p_config->interval_ms
+                                                                                                : BLE_ADV_INTERVAL_MS_DEFAULT;
+    m_host.peripheral.included_service_uuid = ((p_config != NULL) && (p_config->p_included_service_uuid != NULL))
+                                                  ? *p_config->p_included_service_uuid
+                                                  : (ble_uuid_t)BLE_UUID_NONE_INIT;
+    if (m_host.peripheral.adv_name_type > BLE_GAP_ADV_NAME_SHORT)
     {
-        m_host.adv_name_type = BLE_GAP_ADV_NAME_FULL;
+        m_host.peripheral.adv_name_type = BLE_GAP_ADV_NAME_FULL;
     }
-    if (m_host.adv_short_name_length > BLE_GAP_DEVICE_NAME_MAX_LEN)
+    if (m_host.peripheral.adv_short_name_length > BLE_GAP_DEVICE_NAME_MAX_LEN)
     {
-        m_host.adv_short_name_length = BLE_GAP_DEVICE_NAME_MAX_LEN;
+        m_host.peripheral.adv_short_name_length = BLE_GAP_DEVICE_NAME_MAX_LEN;
     }
 }
 
@@ -245,16 +255,16 @@ void ble_gap_scan_init(const ble_scan_config_t *p_config)
         return;
     }
 
-    m_host.scan_config.interval_ms = ((p_config != NULL) && (p_config->interval_ms != 0U))
-                                         ? p_config->interval_ms
-                                         : BLE_SCAN_INTERVAL_MS_DEFAULT;
-    m_host.scan_config.window_ms = ((p_config != NULL) && (p_config->window_ms != 0U))
-                                       ? p_config->window_ms
-                                       : BLE_SCAN_WINDOW_MS_DEFAULT;
+    m_host.central.scan_config.interval_ms = ((p_config != NULL) && (p_config->interval_ms != 0U))
+                                                ? p_config->interval_ms
+                                                : BLE_SCAN_INTERVAL_MS_DEFAULT;
+    m_host.central.scan_config.window_ms = ((p_config != NULL) && (p_config->window_ms != 0U))
+                                              ? p_config->window_ms
+                                              : BLE_SCAN_WINDOW_MS_DEFAULT;
 
-    if (m_host.scan_config.window_ms > m_host.scan_config.interval_ms)
+    if (m_host.central.scan_config.window_ms > m_host.central.scan_config.interval_ms)
     {
-        m_host.scan_config.window_ms = m_host.scan_config.interval_ms;
+        m_host.central.scan_config.window_ms = m_host.central.scan_config.interval_ms;
     }
 }
 

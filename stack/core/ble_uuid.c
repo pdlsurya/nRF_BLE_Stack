@@ -30,7 +30,7 @@ uint16_t ble_uuid_encoded_len(const ble_uuid_t *p_uuid)
         return BLE_UUID128_LEN;
     }
 
-    if ((p_uuid->type == BLE_UUID_TYPE_VENDOR_16) && m_host.vendor_uuid_base_set)
+    if ((p_uuid->type == BLE_UUID_TYPE_VENDOR_16) && m_host.common.vendor_uuid_base_set)
     {
         return BLE_UUID128_LEN;
     }
@@ -62,9 +62,9 @@ bool ble_uuid_encode(const ble_uuid_t *p_uuid, uint8_t *p_dst)
         return true;
     }
 
-    if ((p_uuid->type == BLE_UUID_TYPE_VENDOR_16) && m_host.vendor_uuid_base_set)
+    if ((p_uuid->type == BLE_UUID_TYPE_VENDOR_16) && m_host.common.vendor_uuid_base_set)
     {
-        (void)memcpy(p_dst, m_host.vendor_uuid_base, BLE_UUID128_LEN);
+        (void)memcpy(p_dst, m_host.common.vendor_uuid_base, BLE_UUID128_LEN);
         /* BLE carries 128-bit UUIDs in little-endian byte order. Patching
          * bytes 12..13 here corresponds to the canonical 0000XXXX-... slot. */
         u16_encode(p_uuid->value.uuid16, &p_dst[12]);
@@ -95,11 +95,11 @@ void ble_uuid_set_vendor_base(const uint8_t uuid128[BLE_UUID128_LEN])
 {
     if (uuid128 == NULL)
     {
-        m_host.vendor_uuid_base_set = false;
-        (void)memset(m_host.vendor_uuid_base, 0, sizeof(m_host.vendor_uuid_base));
+        m_host.common.vendor_uuid_base_set = false;
+        (void)memset(m_host.common.vendor_uuid_base, 0, sizeof(m_host.common.vendor_uuid_base));
         return;
     }
 
-    (void)memcpy(m_host.vendor_uuid_base, uuid128, BLE_UUID128_LEN);
-    m_host.vendor_uuid_base_set = true;
+    (void)memcpy(m_host.common.vendor_uuid_base, uuid128, BLE_UUID128_LEN);
+    m_host.common.vendor_uuid_base_set = true;
 }

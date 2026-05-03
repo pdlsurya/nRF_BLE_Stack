@@ -225,64 +225,6 @@ Notes:
   the bundled example calls `log_idle()` in the main loop instead of sleeping
   with `__WFE()`.
 
-## Typical Usage
-
-```c
-static const uint8_t custom_uuid_base[BLE_UUID128_LEN] = {
-    0x52, 0xD0, 0x4F, 0x36, 0x7E, 0x85, 0x74, 0x1C,
-    0xA6, 0x8F, 0x4E, 0x7A, 0x00, 0x00, 0x00, 0x00,
-};
-
-static void gap_evt_handler(const ble_gap_evt_t *p_evt)
-{
-    switch (p_evt->evt_type)
-    {
-    case BLE_GAP_EVT_CONNECTED:
-        (void)p_evt->params.conn_interval_ms;
-        break;
-    case BLE_GAP_EVT_CONN_UPDATE_IND:
-        (void)p_evt->params.slave_latency;
-        break;
-    case BLE_GAP_EVT_DISCONNECTED:
-        ble_gap_start_advertising();
-        break;
-    default:
-        break;
-    }
-}
-
-static void gatt_server_evt_handler(const ble_gatt_server_evt_t *p_evt)
-{
-    if (p_evt->evt_type == BLE_GATT_SERVER_EVT_MTU_EXCHANGE)
-    {
-        (void)p_evt->params.effective_mtu;
-    }
-}
-
-int main(void)
-{
-    ble_stack_init(BLE_GAP_ROLE_PERIPHERAL);
-    ble_gap_register_evt_handler(gap_evt_handler);
-    ble_gatt_server_register_evt_handler(gatt_server_evt_handler);
-    ble_gap_set_device_name("nrf-ble");
-    ble_gap_set_conn_params(&(ble_gap_conn_params_t){
-        .min_conn_interval_1p25ms = MS_TO_1P25MS_UNITS(30U),
-        .max_conn_interval_1p25ms = MS_TO_1P25MS_UNITS(30U),
-        .slave_latency = 0U,
-        .supervision_timeout_10ms = MS_TO_10MS_UNITS(720U),
-    });
-    ble_uuid_set_vendor_base(custom_uuid_base);
-    ble_gap_adv_init(&adv_config);
-    APP_ERROR_CHECK_BOOL(ble_gatt_server_init(services, service_count));
-    ble_gap_start_advertising();
-
-    for (;;)
-    {
-        log_idle();
-    }
-}
-```
-
 ## Runtime Flow Summary
 
 The stack has a shared initialization path and then diverges into peripheral or

@@ -13,8 +13,6 @@
 
 #include <string.h>
 
-#define BLE_PRIMARY_ADV_PDU_TYPE LL_ADV_IND
-
 APP_TIMER_DEF(m_adv_timer_id);
 
 static void controller_peripheral_reset_adv_state(void);
@@ -24,6 +22,17 @@ static void radio_handle_connected_crc_error_peripheral(void);
 static void radio_handle_connected_bcmatch_peripheral(void);
 static void controller_peripheral_handle_connected_disabled(void);
 static void controller_peripheral_handle_adv_disabled(void);
+
+static bool host_adv_type_is_scannable(void)
+{
+    return (m_host.peripheral.adv_type == BLE_GAP_ADV_TYPE_CONNECTABLE_SCANNABLE_UNDIRECTED) ||
+           (m_host.peripheral.adv_type == BLE_GAP_ADV_TYPE_NONCONNECTABLE_SCANNABLE_UNDIRECTED);
+}
+
+static bool host_adv_type_is_connectable(void)
+{
+    return m_host.peripheral.adv_type == BLE_GAP_ADV_TYPE_CONNECTABLE_SCANNABLE_UNDIRECTED;
+}
 
 static bool host_add_ad_structure(uint8_t *p_adv_data_len, uint8_t type, const uint8_t *p_data, uint8_t size)
 {
@@ -49,15 +58,15 @@ static void host_add_device_name_ad_structure(uint8_t *p_adv_data_len)
     uint8_t ad_type;
     uint8_t adv_name_len;
 
-    if ((p_adv_data_len == NULL) || (m_host.gap_device_name[0] == '\0'))
+    if ((p_adv_data_len == NULL) || (m_host.common.gap_device_name[0] == '\0'))
     {
         return;
     }
 
-    full_name_len = strlen(m_host.gap_device_name);
-    if (m_host.adv_name_type == BLE_GAP_ADV_NAME_SHORT)
+    full_name_len = strlen(m_host.common.gap_device_name);
+    if (m_host.peripheral.adv_name_type == BLE_GAP_ADV_NAME_SHORT)
     {
-        adv_name_len = (m_host.adv_short_name_length < full_name_len) ? m_host.adv_short_name_length : (uint8_t)full_name_len;
+        adv_name_len = (m_host.peripheral.adv_short_name_length < full_name_len) ? m_host.peripheral.adv_short_name_length : (uint8_t)full_name_len;
         ad_type = 0x08U;
     }
     else
@@ -71,7 +80,7 @@ static void host_add_device_name_ad_structure(uint8_t *p_adv_data_len)
         return;
     }
 
-    (void)host_add_ad_structure(p_adv_data_len, ad_type, (const uint8_t *)m_host.gap_device_name, adv_name_len);
+    (void)host_add_ad_structure(p_adv_data_len, ad_type, (const uint8_t *)m_host.common.gap_device_name, adv_name_len);
 }
 
 static void host_build_adv_pdu(void)
@@ -83,7 +92,7 @@ static void host_build_adv_pdu(void)
 
     (void)memset(&m_ctrl_rt.peripheral.adv_tx_pdu, 0, sizeof(m_ctrl_rt.peripheral.adv_tx_pdu));
 
-    m_ctrl_rt.peripheral.adv_tx_pdu.header.pdu_type = BLE_PRIMARY_ADV_PDU_TYPE;
+    m_ctrl_rt.peripheral.adv_tx_pdu.header.pdu_type = (uint8_t)m_host.peripheral.adv_type;
     m_ctrl_rt.peripheral.adv_tx_pdu.header.rfu = 0U;
     m_ctrl_rt.peripheral.adv_tx_pdu.header.txadd = (uint8_t)(m_ctrl_rt.local_addr.adv_txadd & 0x01U);
     m_ctrl_rt.peripheral.adv_tx_pdu.header.rxadd = 0U;
@@ -91,17 +100,17 @@ static void host_build_adv_pdu(void)
                  m_ctrl_rt.local_addr.adv_address,
                  sizeof(m_ctrl_rt.local_addr.adv_address));
 
-    (void)host_add_ad_structure(&adv_data_len, 0x01U, &m_host.flags, 1U);
+    (void)host_add_ad_structure(&adv_data_len, 0x01U, &m_host.peripheral.flags, 1U);
     host_add_device_name_ad_structure(&adv_data_len);
 
-    uuid_len = ble_uuid_encoded_len(&m_host.included_service_uuid);
-    if ((uuid_len != 0U) && ble_uuid_encode(&m_host.included_service_uuid, uuid_bytes))
+    uuid_len = ble_uuid_encoded_len(&m_host.peripheral.included_service_uuid);
+    if ((uuid_len != 0U) && ble_uuid_encode(&m_host.peripheral.included_service_uuid, uuid_bytes))
     {
         uuid_ad_type = (uuid_len == BLE_UUID128_LEN) ? 0x07U : 0x03U;
         (void)host_add_ad_structure(&adv_data_len, uuid_ad_type, uuid_bytes, (uint8_t)uuid_len);
     }
 
-    (void)host_add_ad_structure(&adv_data_len, 0x0AU, (const uint8_t *)&m_host.tx_power, 1U);
+    (void)host_add_ad_structure(&adv_data_len, 0x0AU, (const uint8_t *)&m_host.common.tx_power, 1U);
 
     m_ctrl_rt.peripheral.adv_tx_pdu.payload_length = (uint8_t)(BLE_ADV_ADVERTISER_ADDRESS_LEN + adv_data_len);
 }
@@ -209,7 +218,8 @@ static void controller_peripheral_handle_adv_crc_ok(const ble_adv_rx_pdu_t *p_ad
         return;
     }
 
-    if ((p_adv_rx->adv.header.pdu_type == LL_SCAN_REQ) &&
+    if (host_adv_type_is_scannable() &&
+        (p_adv_rx->adv.header.pdu_type == LL_SCAN_REQ) &&
         controller_peripheral_scan_request_targets_us(&p_adv_rx->scan_req))
     {
         m_ctrl_rt.peripheral.scan_rsp_pdu.header.rxadd = (uint8_t)(p_adv_rx->scan_req.header.txadd & 0x01U);
@@ -217,7 +227,8 @@ static void controller_peripheral_handle_adv_crc_ok(const ble_adv_rx_pdu_t *p_ad
         return;
     }
 
-    if ((p_adv_rx->adv.header.pdu_type == LL_CONNECT_REQ) &&
+    if (host_adv_type_is_connectable() &&
+        (p_adv_rx->adv.header.pdu_type == LL_CONNECT_REQ) &&
         controller_peripheral_connect_request_targets_us(&p_adv_rx->connect_req))
     {
         m_ctrl_rt.peripheral.adv_connect_pending = true;
@@ -529,7 +540,7 @@ void controller_peripheral_start_advertising_internal(void)
                                     m_adv_access_address,
                                     m_adv_crc_init,
                                     (uint32_t)&m_ctrl_rt.peripheral.adv_tx_pdu);
-    controller_peripheral_adv_timer_start(m_host.adv_interval_ms);
+    controller_peripheral_adv_timer_start(m_host.peripheral.adv_interval_ms);
 }
 
 void controller_peripheral_adv_timer_init(void)

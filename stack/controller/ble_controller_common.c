@@ -159,7 +159,7 @@ void controller_prepare_radio_common(uint8_t max_payload_size, const uint8_t *p_
     radio_set_address(p_address, 4U, 0U);
     radio_set_tx_logical_address(0U);
     radio_set_rx_logical_address(0U);
-    radio_set_tx_power((uint32_t)(uint8_t)m_host.tx_power);
+    radio_set_tx_power((uint32_t)(uint8_t)m_host.common.tx_power);
     radio_configure_crc(3U, 1U, m_ble_crc_poly, crc_init);
     radio_set_packet_ptr(packet_ptr);
 }

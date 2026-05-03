@@ -55,6 +55,13 @@ typedef enum
 
 typedef enum
 {
+    BLE_GAP_ADV_TYPE_CONNECTABLE_SCANNABLE_UNDIRECTED = 0x00U,
+    BLE_GAP_ADV_TYPE_NONCONNECTABLE_NONSCANNABLE_UNDIRECTED = 0x02U,
+    BLE_GAP_ADV_TYPE_NONCONNECTABLE_SCANNABLE_UNDIRECTED = 0x06U,
+} ble_gap_adv_type_t;
+
+typedef enum
+{
     BLE_GAP_ROLE_NONE = 0,
     BLE_GAP_ROLE_PERIPHERAL,
     BLE_GAP_ROLE_CENTRAL
@@ -74,6 +81,7 @@ typedef struct
     const ble_uuid_t *p_included_service_uuid;
     ble_gap_adv_name_type_t name_type;
     uint8_t short_name_length;
+    ble_gap_adv_type_t adv_type;
 } ble_adv_config_t;
 
 typedef struct
