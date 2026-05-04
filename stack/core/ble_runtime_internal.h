@@ -144,7 +144,8 @@ typedef struct
     ble_gap_adv_type_t adv_type;
     ble_gap_adv_name_type_t adv_name_type;
     uint8_t adv_short_name_length;
-    ble_uuid_t included_service_uuid;
+    ble_uuid_t adv_included_service_uuid;
+    uint8_t service_count;
 } ble_host_peripheral_t;
 
 typedef struct

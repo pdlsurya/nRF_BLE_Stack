@@ -20,15 +20,8 @@ APP_TIMER_DEF(m_scan_timer_id);
 APP_TIMER_DEF(m_scan_window_timer_id);
 
 static void controller_central_reset_scan_state(void);
-static void controller_central_handle_scan_crc_ok(const ble_adv_rx_pdu_t *p_scan_rx);
 static void controller_central_auto_ctrl_complete(ble_gap_ctrl_procedure_t procedure);
 static uint8_t controller_central_ctrl_proc_request_opcode(ble_gap_ctrl_procedure_t procedure);
-static bool controller_central_scan_filter_matches(const ble_gap_addr_t *p_addr, const ble_adv_rx_pdu_t *p_rx);
-static void controller_central_build_connect_request(const ble_gap_addr_t *p_peer_addr);
-static void radio_handle_connected_packet_central(void);
-static void radio_handle_connected_crc_error_central(void);
-static void controller_central_handle_connected_disabled(void);
-static void controller_central_handle_scan_disabled(void);
 
 static void controller_central_ctrl_proc_reset(void)
 {
@@ -935,7 +928,7 @@ void controller_central_start_connection_event(void)
     radio_set_packet_ptr((uint32_t)&m_ctrl_rt.conn.conn_rx_pdu);
 }
 
-static void radio_handle_connected_packet_central(void)
+static void controller_central_handle_connected_packet(void)
 {
     bool tx_acked = m_ctrl_rt.conn.tx_unacked && (m_ctrl_rt.conn.conn_rx_pdu.header.nesn != m_link.packet.tx_sn);
     bool is_new_packet = (m_ctrl_rt.conn.conn_rx_pdu.header.sn == m_link.packet.next_expected_rx_sn);
@@ -957,7 +950,7 @@ static void radio_handle_connected_packet_central(void)
     m_link.supervision.started = true;
 }
 
-static void radio_handle_connected_crc_error_central(void)
+static void controller_central_handle_crc_error(void)
 {
     m_ctrl_rt.conn.conn_rx_process_pending = false;
     controller_reset_conn_tx_selection_state();
@@ -1024,11 +1017,11 @@ void controller_central_handle_radio_event(radio_event_t evt, const ble_adv_rx_p
     {
         if (evt == RADIO_EVENT_CRC_OK)
         {
-            radio_handle_connected_packet_central();
+            controller_central_handle_connected_packet();
         }
         else if (evt == RADIO_EVENT_CRC_ERROR)
         {
-            radio_handle_connected_crc_error_central();
+            controller_central_handle_crc_error();
         }
         else if (evt == RADIO_EVENT_DISABLED)
         {

@@ -848,7 +848,7 @@ bool ble_gatt_server_init(ble_gatt_service_t *p_services, uint8_t service_count)
     {
         return false;
     }
-
+    m_host.peripheral.service_count = service_count;
     m_att_mtu = BLE_ATT_MTU_DEFAULT;
     m_gatt_db_count = 0U;
     m_char_runtime_count = 0U;

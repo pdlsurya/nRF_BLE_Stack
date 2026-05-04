@@ -234,10 +234,12 @@ void ble_gap_adv_init(const ble_adv_config_t *p_config)
                                      ? p_config->adv_type
                                      : BLE_GAP_ADV_TYPE_CONNECTABLE_SCANNABLE_UNDIRECTED;
     m_host.peripheral.adv_interval_ms = ((p_config != NULL) && (p_config->interval_ms != 0U)) ? p_config->interval_ms
-                                                                                                : BLE_ADV_INTERVAL_MS_DEFAULT;
-    m_host.peripheral.included_service_uuid = ((p_config != NULL) && (p_config->p_included_service_uuid != NULL))
-                                                  ? *p_config->p_included_service_uuid
-                                                  : (ble_uuid_t)BLE_UUID_NONE_INIT;
+                                                                                              : BLE_ADV_INTERVAL_MS_DEFAULT;
+    m_host.peripheral.adv_included_service_uuid = ((p_config != NULL) && (p_config->p_included_service_uuid != NULL))
+                                                      ? *p_config->p_included_service_uuid
+                                                      : (ble_uuid_t)BLE_UUID_NONE_INIT;
+    m_host.peripheral.service_count = ((p_config != NULL) && (p_config->p_included_service_uuid != NULL)) ? 1U : 0U; // Defaults adv included service uuid type to complete list of 16-bit/128-bit UUIDs.
+
     if (m_host.peripheral.adv_name_type > BLE_GAP_ADV_NAME_SHORT)
     {
         m_host.peripheral.adv_name_type = BLE_GAP_ADV_NAME_FULL;
@@ -256,11 +258,11 @@ void ble_gap_scan_init(const ble_scan_config_t *p_config)
     }
 
     m_host.central.scan_config.interval_ms = ((p_config != NULL) && (p_config->interval_ms != 0U))
-                                                ? p_config->interval_ms
-                                                : BLE_SCAN_INTERVAL_MS_DEFAULT;
+                                                 ? p_config->interval_ms
+                                                 : BLE_SCAN_INTERVAL_MS_DEFAULT;
     m_host.central.scan_config.window_ms = ((p_config != NULL) && (p_config->window_ms != 0U))
-                                              ? p_config->window_ms
-                                              : BLE_SCAN_WINDOW_MS_DEFAULT;
+                                               ? p_config->window_ms
+                                               : BLE_SCAN_WINDOW_MS_DEFAULT;
 
     if (m_host.central.scan_config.window_ms > m_host.central.scan_config.interval_ms)
     {
