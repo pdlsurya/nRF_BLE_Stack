@@ -1023,7 +1023,7 @@ bool ble_gatt_server_indicate_characteristic(const ble_gatt_characteristic_t *p_
     return true;
 }
 
-uint16_t ble_gatt_server_process_request(const uint8_t *p_att, uint16_t att_len, uint8_t *p_rsp, uint16_t rsp_max_len)
+uint16_t ble_gatt_server_process_att_pdu(const uint8_t *p_att, uint16_t att_len, uint8_t *p_rsp, uint16_t rsp_max_len)
 {
     uint8_t opcode;
     uint16_t max_rsp_len;

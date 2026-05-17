@@ -58,7 +58,7 @@ typedef enum
     LL_SCAN_REQ = 0x03,
     LL_SCAN_RSP = 0x04,
     LL_CONNECT_REQ = 0x05
-} ble_adv_pdu_type_t;
+} ble_ll_adv_pdu_type_t;
 
 typedef enum
 {
@@ -79,7 +79,7 @@ typedef struct
 {
     ble_ll_adv_header_t header;
     uint8_t payload_length;
-    uint8_t mac_address[6];
+    uint8_t advertiser_address[6];
     uint8_t payload[BLE_LL_ADV_RX_PAYLOAD_MAX_LEN];
 } __attribute__((packed)) ble_ll_adv_pdu_t;
 
@@ -89,7 +89,7 @@ typedef struct
     uint8_t payload_length;
     uint8_t scanner_address[6];
     uint8_t advertiser_address[6];
-} __attribute__((packed)) ble_scan_req_pdu_t;
+} __attribute__((packed)) ble_ll_scan_req_pdu_t;
 
 typedef struct
 {
@@ -97,7 +97,7 @@ typedef struct
     uint8_t payload_length;
     uint8_t advertiser_address[6];
     uint8_t payload[BLE_LL_ADV_DATA_MAX_LEN];
-} __attribute__((packed)) ble_scan_rsp_pdu_t;
+} __attribute__((packed)) ble_ll_scan_rsp_pdu_t;
 
 typedef struct
 {
@@ -120,14 +120,13 @@ typedef struct
     uint8_t initiator_address[6];
     uint8_t advertiser_address[6];
     ble_ll_connect_ind_t ll_data;
-} __attribute__((packed)) ble_connect_req_pdu_t;
+} __attribute__((packed)) ble_ll_connect_req_pdu_t;
 
 typedef union
 {
-    ble_ll_adv_pdu_t adv;
-    ble_scan_req_pdu_t scan_req;
-    ble_connect_req_pdu_t connect_req;
-} ble_adv_rx_pdu_t;
+    ble_ll_scan_req_pdu_t scan_req;
+    ble_ll_connect_req_pdu_t connect_req;
+} ble_ll_adv_req_pdu_t;
 
 typedef struct
 {

@@ -289,24 +289,24 @@ void controller_load_identity_address(void)
 
     for (i = 0U; i < 6U; i++)
     {
-        m_ctrl_rt.local_addr.adv_address[i] = (uint8_t)((seed >> (8U * i)) & 0xFFU);
+        m_ctrl_rt.local_addr.addr[i] = (uint8_t)((seed >> (8U * i)) & 0xFFU);
     }
 
-    m_ctrl_rt.local_addr.adv_txadd = 1U;
-    m_ctrl_rt.local_addr.adv_address[5] |= 0xC0U;
-    if (((m_ctrl_rt.local_addr.adv_address[0] == 0x00U) &&
-         (m_ctrl_rt.local_addr.adv_address[1] == 0x00U) &&
-         (m_ctrl_rt.local_addr.adv_address[2] == 0x00U) &&
-         (m_ctrl_rt.local_addr.adv_address[3] == 0x00U) &&
-         (m_ctrl_rt.local_addr.adv_address[4] == 0x00U) &&
-         (m_ctrl_rt.local_addr.adv_address[5] == 0x00U)) ||
-        ((m_ctrl_rt.local_addr.adv_address[0] == 0xFFU) &&
-         (m_ctrl_rt.local_addr.adv_address[1] == 0xFFU) &&
-         (m_ctrl_rt.local_addr.adv_address[2] == 0xFFU) &&
-         (m_ctrl_rt.local_addr.adv_address[3] == 0xFFU) &&
-         (m_ctrl_rt.local_addr.adv_address[4] == 0xFFU) &&
-         (m_ctrl_rt.local_addr.adv_address[5] == 0xFFU)))
+    m_ctrl_rt.local_addr.txadd = 1U;
+    m_ctrl_rt.local_addr.addr[5] |= 0xC0U;
+    if (((m_ctrl_rt.local_addr.addr[0] == 0x00U) &&
+         (m_ctrl_rt.local_addr.addr[1] == 0x00U) &&
+         (m_ctrl_rt.local_addr.addr[2] == 0x00U) &&
+         (m_ctrl_rt.local_addr.addr[3] == 0x00U) &&
+         (m_ctrl_rt.local_addr.addr[4] == 0x00U) &&
+         (m_ctrl_rt.local_addr.addr[5] == 0x00U)) ||
+        ((m_ctrl_rt.local_addr.addr[0] == 0xFFU) &&
+         (m_ctrl_rt.local_addr.addr[1] == 0xFFU) &&
+         (m_ctrl_rt.local_addr.addr[2] == 0xFFU) &&
+         (m_ctrl_rt.local_addr.addr[3] == 0xFFU) &&
+         (m_ctrl_rt.local_addr.addr[4] == 0xFFU) &&
+         (m_ctrl_rt.local_addr.addr[5] == 0xFFU)))
     {
-        m_ctrl_rt.local_addr.adv_address[0] ^= 0x5AU;
+        m_ctrl_rt.local_addr.addr[0] ^= 0x5AU;
     }
 }

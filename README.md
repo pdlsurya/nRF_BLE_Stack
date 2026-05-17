@@ -25,7 +25,8 @@ layers so packet flow is easy to follow in code.
 - One role active at a time
 - Advertising with configurable name, flags, TX power, interval, and one
   included service UUID
-- Passive scanning with scan report callbacks and optional auto-connect filter
+- Passive and active legacy scanning with scan report callbacks, optional
+  auto-connect filter, and `scan_response` reporting
 - Minimal legacy `SCAN_RSP` support for active scanners that send `SCAN_REQ`
   before showing or connecting
 - Standard 16-bit SIG UUIDs and vendor UUIDs expanded from one registered
@@ -133,8 +134,8 @@ interface.
   scanning, connection-event timing, LL control, retransmission behavior, DLE
   parameter tracking, and ATT/L2CAP packet transport.
 - `ble_l2cap.c`
-  Internal L2CAP signaling handling and connection-parameter update request
-  formatting.
+  Internal L2CAP connection-data dispatch, ATT PDU routing, signaling PDU
+  handling, and connection-parameter update request formatting.
 - `ble_gatt_server.c`
   ATT database construction, 16-bit and vendor-base UUID expansion for
   discovery responses, ATT request handling, CCCD tracking, MTU negotiation,
@@ -244,6 +245,10 @@ Common setup:
    is queued for the next connection event.
 6. Stack-level BLE events and characteristic callbacks are delivered later
    from `SWI1_EGU1_IRQHandler()`.
+7. Connected L2CAP data PDUs are decoded by `ble_l2cap_process_conn_data_pdu()`,
+   which routes ATT traffic into `ble_gatt_client_process_att_pdu()` or
+   `ble_gatt_server_process_att_pdu()` depending on role, and routes L2CAP
+   signaling traffic into the internal signaling-PDU handler.
 
 Peripheral flow:
 
@@ -273,21 +278,26 @@ Central flow:
 1. `ble_gap_scan_init()` stores scan interval and window parameters.
 2. Optional `ble_gap_set_scan_filter()` configuration tells the controller
    which peer address, name, or service UUID should trigger auto-connect.
-3. `ble_gap_start_scanning()` starts passive scanning on channels 37, 38, and
-   39 and reports advertisements through the registered scan-report callback.
-4. If the app calls `ble_gap_connect()` or a scan filter matches a connectable
-   advertisement, the controller builds and transmits a legacy connect request
-   and then switches to connected mode.
-5. Once connected, the central automatically sequences LL feature exchange,
+3. `ble_gap_start_scanning()` starts passive or active scanning on channels
+   37, 38, and 39 and reports advertisements through the registered
+   scan-report callback.
+4. If active scanning is enabled and a scannable advertisement is received,
+   the controller can send `SCAN_REQ`, report the matching `SCAN_RSP`, and
+   remember that peer for a later connectable advertisement if the filter only
+   matches in scan-response data.
+5. If the app calls `ble_gap_connect()` or a scan filter matches a connectable
+   advertisement directly, the controller builds and transmits a legacy
+   connect request and then switches to connected mode.
+6. Once connected, the central automatically sequences LL feature exchange,
    data length update, and a `1M | 2M` PHY request.
-6. If the peer performs LL feature exchange, LL length update, connection
+7. If the peer performs LL feature exchange, LL length update, connection
    update, or LL PHY update procedures on its own, shared controller handling
    updates the negotiated link state and reports the resulting GAP events
    without entering central-only procedure state from peripheral mode.
-7. Applications can start ATT MTU exchange and GATT discovery immediately
+8. Applications can start ATT MTU exchange and GATT discovery immediately
    after `BLE_GAP_EVT_CONNECTED`; automatic central LL control traffic stays
    ahead of queued ATT/L2CAP payloads.
-8. Central-side GATT client procedures then drive service discovery,
+9. Central-side GATT client procedures then drive service discovery,
    characteristic discovery, descriptor discovery, reads, writes, and CCCD
    updates.
 

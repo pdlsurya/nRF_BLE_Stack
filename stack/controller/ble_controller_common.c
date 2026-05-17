@@ -781,7 +781,7 @@ void controller_connected_timer_start(uint32_t first_event_delay_us)
     NRF_TIMER0->TASKS_START = 1U;
 }
 
-void controller_prepare_connected_link(const ble_connect_req_pdu_t *p_req,
+void controller_prepare_connected_link(const ble_ll_connect_req_pdu_t *p_req,
                                        ble_gap_role_t role,
                                        const ble_gap_addr_t *p_peer_addr)
 {
@@ -853,15 +853,15 @@ void controller_prepare_connected_link(const ble_connect_req_pdu_t *p_req,
 
 static void radio_evt_handler(radio_event_t evt)
 {
-    const ble_adv_rx_pdu_t *p_adv_rx = &m_ctrl_rt.peripheral.adv_rx_pdu;
+    const ble_ll_adv_req_pdu_t *p_adv_rx = &m_ctrl_rt.peripheral.adv_rx_pdu;
 
     if (m_link.connected)
     {
         if (m_link.role == BLE_GAP_ROLE_CENTRAL)
         {
-            const ble_adv_rx_pdu_t *p_scan_rx = &m_ctrl_rt.central.scan_rx_pdu;
+            const ble_ll_adv_pdu_t *p_adv_rx = &m_ctrl_rt.central.adv_rx_pdu;
 
-            controller_central_handle_radio_event(evt, p_scan_rx);
+            controller_central_handle_radio_event(evt, p_adv_rx);
         }
         else
         {
@@ -879,9 +879,9 @@ static void radio_evt_handler(radio_event_t evt)
     if ((m_host.configured_role == BLE_GAP_ROLE_CENTRAL) &&
         (m_ctrl_rt.central.scan_radio_phase != BLE_SCAN_RADIO_PHASE_IDLE))
     {
-        const ble_adv_rx_pdu_t *p_scan_rx = &m_ctrl_rt.central.scan_rx_pdu;
+        const ble_ll_adv_pdu_t *p_adv_rx = &m_ctrl_rt.central.adv_rx_pdu;
 
-        controller_central_handle_radio_event(evt, p_scan_rx);
+        controller_central_handle_radio_event(evt, p_adv_rx);
     }
 }
 

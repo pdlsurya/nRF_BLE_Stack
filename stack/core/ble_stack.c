@@ -32,6 +32,7 @@ void ble_stack_init(ble_gap_role_t role)
             .scan_config = {
                 .interval_ms = BLE_SCAN_INTERVAL_MS_DEFAULT,
                 .window_ms = BLE_SCAN_WINDOW_MS_DEFAULT,
+                .active = false,
             },
         },
         .common = {

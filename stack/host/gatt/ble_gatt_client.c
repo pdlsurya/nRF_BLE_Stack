@@ -743,10 +743,10 @@ bool ble_gatt_client_write_cccd(uint16_t cccd_handle, bool enable_notifications,
     return true;
 }
 
-uint16_t ble_gatt_client_process_pdu(const uint8_t *p_att,
-                                     uint16_t att_len,
-                                     uint8_t *p_rsp,
-                                     uint16_t rsp_max_len)
+uint16_t ble_gatt_client_process_att_pdu(const uint8_t *p_att,
+                                         uint16_t att_len,
+                                         uint8_t *p_rsp,
+                                         uint16_t rsp_max_len)
 {
     uint8_t opcode;
 

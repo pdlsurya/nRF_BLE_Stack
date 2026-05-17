@@ -142,9 +142,10 @@ bool ble_gap_set_scan_filter(const ble_gap_scan_filter_t *p_filter)
         return false;
     }
 
-    m_ctrl_rt.central.connect_filter = *p_filter;
-    m_ctrl_rt.central.connect_filter_enabled = true;
+    m_ctrl_rt.central.scan_filter = *p_filter;
+    m_ctrl_rt.central.scan_filter_enabled = true;
     m_ctrl_rt.central.connect_target_valid = false;
+    m_ctrl_rt.central.scan_rsp_connect_candidate_valid = false;
     return true;
 }
 
@@ -155,9 +156,10 @@ void ble_gap_clear_scan_filter(void)
         return;
     }
 
-    m_ctrl_rt.central.connect_filter_enabled = false;
-    m_ctrl_rt.central.connect_filter = (ble_gap_scan_filter_t){0};
+    m_ctrl_rt.central.scan_filter_enabled = false;
+    m_ctrl_rt.central.scan_filter = (ble_gap_scan_filter_t){0};
     m_ctrl_rt.central.connect_target_valid = false;
+    m_ctrl_rt.central.scan_rsp_connect_candidate_valid = false;
 }
 
 bool ble_gap_request_conn_params_update(void)
@@ -263,6 +265,7 @@ void ble_gap_scan_init(const ble_scan_config_t *p_config)
     m_host.central.scan_config.window_ms = ((p_config != NULL) && (p_config->window_ms != 0U))
                                                ? p_config->window_ms
                                                : BLE_SCAN_WINDOW_MS_DEFAULT;
+    m_host.central.scan_config.active = (p_config != NULL) ? p_config->active : false;
 
     if (m_host.central.scan_config.window_ms > m_host.central.scan_config.interval_ms)
     {

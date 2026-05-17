@@ -75,7 +75,7 @@ typedef enum
 typedef struct
 {
     uint8_t addr[6];
-    bool addr_is_random;
+    bool is_random;
 } ble_gap_addr_t;
 
 typedef struct
@@ -110,6 +110,7 @@ typedef struct
 {
     uint16_t interval_ms;
     uint16_t window_ms;
+    bool active;
 } ble_scan_config_t;
 
 typedef struct
@@ -128,6 +129,7 @@ typedef struct
 {
     ble_gap_addr_t addr;
     uint8_t adv_type;
+    bool scan_response;
     bool connectable;
     bool scannable;
     int8_t rssi;

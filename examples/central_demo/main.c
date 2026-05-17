@@ -19,6 +19,10 @@
 
 #define UUID_STR_CHARS 40U
 #define GATT_DISCOVERY_MAX_CHARACTERISTICS 8U
+#define BLE_AD_TYPE_INCOMPLETE_UUID16_LIST 0x02U
+#define BLE_AD_TYPE_COMPLETE_UUID16_LIST 0x03U
+#define BLE_AD_TYPE_INCOMPLETE_UUID128_LIST 0x06U
+#define BLE_AD_TYPE_COMPLETE_UUID128_LIST 0x07U
 #define BLE_UUID_CCCD 0x2902U
 
 typedef struct
@@ -42,6 +46,7 @@ typedef struct
 
 static void gap_evt_handler(const ble_gap_evt_t *p_evt);
 static void gatt_client_evt_handler(const ble_gatt_client_evt_t *p_evt);
+static void scan_report_handler(const ble_gap_scan_report_t *p_report);
 static void ble_state_set(bool connected);
 static void ble_addr_format(const ble_gap_addr_t *p_addr, char *p_buffer, size_t buffer_size);
 static void gatt_client_uuid_format(const ble_uuid_t *p_uuid, char *p_buffer, size_t buffer_size);
@@ -74,6 +79,7 @@ static const uint8_t m_custom_uuid_base[BLE_UUID128_LEN] = {
 static const ble_scan_config_t m_scan_config = {
     .interval_ms = 100U,
     .window_ms = 50U,
+    .active = true,
 };
 
 static const ble_gap_conn_params_t m_gap_conn_params = {
@@ -143,7 +149,7 @@ static void ble_addr_format(const ble_gap_addr_t *p_addr, char *p_buffer, size_t
                    p_addr->addr[2],
                    p_addr->addr[1],
                    p_addr->addr[0],
-                   p_addr->addr_is_random ? "random" : "public");
+                   p_addr->is_random ? "random" : "public");
 }
 
 static void gatt_client_uuid_format(const ble_uuid_t *p_uuid, char *p_buffer, size_t buffer_size)
@@ -207,6 +213,108 @@ static void demo_target_init(void)
     m_target_notify_char_uuid = (ble_uuid_t)BLE_UUID_NONE_INIT;
     m_target_notify_char_uuid.type = BLE_UUID_TYPE_RAW_128;
     demo_vendor_uuid_build(0xFFF1U, m_target_notify_char_uuid.value.uuid128);
+}
+
+static bool adv_data_next(const uint8_t *p_adv_data,
+                          uint8_t adv_data_len,
+                          uint8_t *p_offset,
+                          uint8_t *p_ad_type,
+                          const uint8_t **pp_value,
+                          uint8_t *p_value_len)
+{
+    uint8_t field_len;
+
+    if ((p_adv_data == NULL) ||
+        (p_offset == NULL) ||
+        (p_ad_type == NULL) ||
+        (pp_value == NULL) ||
+        (p_value_len == NULL) ||
+        (*p_offset >= adv_data_len))
+    {
+        return false;
+    }
+
+    field_len = p_adv_data[*p_offset];
+    if ((field_len == 0U) ||
+        ((uint16_t)(*p_offset) + (uint16_t)field_len + 1U > (uint16_t)adv_data_len))
+    {
+        return false;
+    }
+
+    *p_ad_type = p_adv_data[*p_offset + 1U];
+    *p_value_len = (uint8_t)(field_len - 1U);
+    *pp_value = &p_adv_data[*p_offset + 2U];
+    *p_offset = (uint8_t)(*p_offset + field_len + 1U);
+    return true;
+}
+
+static bool adv_data_contains_uuid(const uint8_t *p_adv_data,
+                                   uint8_t adv_data_len,
+                                   const ble_uuid_t *p_uuid)
+{
+    const uint8_t *p_value;
+    const uint8_t *p_uuid_bytes;
+    uint8_t offset = 0U;
+    uint8_t ad_type;
+    uint8_t value_len;
+    uint8_t entry_len;
+    uint8_t uuid16_bytes[BLE_UUID16_LEN];
+    uint8_t i;
+
+    if ((p_adv_data == NULL) || (p_uuid == NULL))
+    {
+        return false;
+    }
+
+    if ((p_uuid->type == BLE_UUID_TYPE_SIG_16) ||
+        (p_uuid->type == BLE_UUID_TYPE_VENDOR_16))
+    {
+        entry_len = BLE_UUID16_LEN;
+        uuid16_bytes[0] = (uint8_t)(p_uuid->value.uuid16 & 0xFFU);
+        uuid16_bytes[1] = (uint8_t)((p_uuid->value.uuid16 >> 8) & 0xFFU);
+        p_uuid_bytes = uuid16_bytes;
+    }
+    else if (p_uuid->type == BLE_UUID_TYPE_RAW_128)
+    {
+        entry_len = BLE_UUID128_LEN;
+        p_uuid_bytes = p_uuid->value.uuid128;
+    }
+    else
+    {
+        return false;
+    }
+
+    while (adv_data_next(p_adv_data, adv_data_len, &offset, &ad_type, &p_value, &value_len))
+    {
+        if ((entry_len == BLE_UUID16_LEN) &&
+            (ad_type != BLE_AD_TYPE_INCOMPLETE_UUID16_LIST) &&
+            (ad_type != BLE_AD_TYPE_COMPLETE_UUID16_LIST))
+        {
+            continue;
+        }
+
+        if ((entry_len == BLE_UUID128_LEN) &&
+            (ad_type != BLE_AD_TYPE_INCOMPLETE_UUID128_LIST) &&
+            (ad_type != BLE_AD_TYPE_COMPLETE_UUID128_LIST))
+        {
+            continue;
+        }
+
+        if ((value_len == 0U) || ((value_len % entry_len) != 0U))
+        {
+            continue;
+        }
+
+        for (i = 0U; (uint16_t)i + entry_len <= value_len; i = (uint8_t)(i + entry_len))
+        {
+            if (memcmp(&p_value[i], p_uuid_bytes, entry_len) == 0)
+            {
+                return true;
+            }
+        }
+    }
+
+    return false;
 }
 
 static bool gatt_client_uuid_matches(const ble_uuid_t *p_lhs, const ble_uuid_t *p_rhs)
@@ -364,6 +472,25 @@ static void start_target_scan(void)
     }
 
     log_printf("BLE central scan failed\n");
+}
+
+static void scan_report_handler(const ble_gap_scan_report_t *p_report)
+{
+    char addr_str[32];
+
+    if ((p_report == NULL) ||
+        !adv_data_contains_uuid(p_report->data, p_report->data_len, &m_target_service_uuid))
+    {
+        return;
+    }
+
+    ble_addr_format(&p_report->addr, addr_str, sizeof(addr_str));
+    log_printf("BLE scan hit %s\n", addr_str);
+    log_printf("adv=0x%02X rsp=%u conn=%u scan=%u\n",
+               (unsigned int)p_report->adv_type,
+               (unsigned int)p_report->scan_response,
+               (unsigned int)p_report->connectable,
+               (unsigned int)p_report->scannable);
 }
 
 static const char *ble_phy_name(uint8_t phy)
@@ -605,6 +732,7 @@ int main(void)
 
     ble_stack_init(BLE_GAP_ROLE_CENTRAL);
     ble_gap_register_evt_handler(gap_evt_handler);
+    ble_gap_register_scan_report_handler(scan_report_handler);
     ble_gatt_client_register_evt_handler(gatt_client_evt_handler);
     ble_gap_set_conn_params(&m_gap_conn_params);
     ble_uuid_set_vendor_base(m_custom_uuid_base);

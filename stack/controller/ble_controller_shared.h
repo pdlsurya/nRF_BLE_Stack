@@ -43,7 +43,7 @@ bool controller_load_pending_conn_tx_pdu_for_state(uint8_t next_expected_rx_sn, 
 void controller_stage_conn_response(bool new_tx_pdu);
 void controller_process_received_conn_pdu(void);
 void controller_connected_timer_start(uint32_t first_event_delay_us);
-void controller_prepare_connected_link(const ble_connect_req_pdu_t *p_req,
+void controller_prepare_connected_link(const ble_ll_connect_req_pdu_t *p_req,
                                        ble_gap_role_t role,
                                        const ble_gap_addr_t *p_peer_addr);
 
@@ -58,7 +58,7 @@ uint16_t controller_central_process_phy_rsp(const uint8_t *p_payload, uint8_t le
 void controller_peripheral_state_reset(void);
 void controller_peripheral_start_connection_event(void);
 void controller_central_start_connection_event(void);
-void controller_central_handle_radio_event(radio_event_t evt, const ble_adv_rx_pdu_t *p_scan_rx);
-void controller_peripheral_handle_radio_event(radio_event_t evt, const ble_adv_rx_pdu_t *p_adv_rx);
+void controller_central_handle_radio_event(radio_event_t evt, const ble_ll_adv_pdu_t *p_adv_rx);
+void controller_peripheral_handle_radio_event(radio_event_t evt, const ble_ll_adv_req_pdu_t *p_adv_rx);
 
 #endif

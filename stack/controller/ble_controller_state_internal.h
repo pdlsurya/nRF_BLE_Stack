@@ -39,6 +39,8 @@ typedef enum
 {
     BLE_SCAN_RADIO_PHASE_IDLE = 0,
     BLE_SCAN_RADIO_PHASE_WAIT_RX_DISABLED,
+    BLE_SCAN_RADIO_PHASE_WAIT_SCAN_REQ_TX_DISABLED,
+    BLE_SCAN_RADIO_PHASE_WAIT_SCAN_RSP_RX_DISABLED,
     BLE_SCAN_RADIO_PHASE_WAIT_CONNECT_TX_DISABLED,
 } ble_scan_radio_phase_t;
 
@@ -94,31 +96,39 @@ typedef struct
 
 typedef struct
 {
-    uint8_t adv_address[6];
-    uint8_t adv_txadd;
+    uint8_t addr[6];
+    uint8_t txadd;
 } ble_local_addr_runtime_t;
 
 typedef struct
 {
     ble_ll_adv_pdu_t adv_tx_pdu;
-    ble_scan_rsp_pdu_t scan_rsp_pdu;
-    ble_adv_rx_pdu_t adv_rx_pdu;
-    bool adv_scan_rsp_pending;
-    bool adv_connect_pending;
+    ble_ll_scan_rsp_pdu_t scan_rsp_pdu;
+    ble_ll_adv_req_pdu_t adv_rx_pdu;
+    bool scan_rsp_tx_pending;
+    bool connect_req_pending;
     ble_adv_radio_phase_t adv_radio_phase;
 } ble_peripheral_ctrl_runtime_t;
 
 typedef struct
 {
-    ble_adv_rx_pdu_t scan_rx_pdu;
-    ble_connect_req_pdu_t connect_req_pdu;
+    ble_ll_adv_pdu_t adv_rx_pdu;
+    ble_ll_scan_req_pdu_t scan_req_pdu;
+    ble_ll_scan_rsp_pdu_t scan_rsp_pdu;
+    ble_ll_connect_req_pdu_t connect_req_pdu;
     uint8_t scan_channel_index;
     bool scanning;
-    bool scan_connect_pending;
-    bool connect_filter_enabled;
-    ble_gap_scan_filter_t connect_filter;
+    bool scan_req_tx_pending;
+    bool connect_req_tx_pending;
+    bool scan_filter_enabled;
+    ble_gap_scan_filter_t scan_filter;
     bool connect_target_valid;
     ble_gap_addr_t connect_target;
+    bool scan_rsp_target_valid;
+    ble_gap_addr_t scan_rsp_target;
+    bool scan_rsp_target_connectable;
+    bool scan_rsp_connect_candidate_valid;
+    ble_gap_addr_t scan_rsp_connect_candidate;
     ble_scan_radio_phase_t scan_radio_phase;
     ble_central_ctrl_proc_context_t central_ctrl_proc;
     ble_auto_ctrl_stage_t auto_ctrl_stage;
