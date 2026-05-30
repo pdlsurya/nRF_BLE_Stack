@@ -230,6 +230,9 @@ Notes:
 The stack has a shared initialization path and then diverges into peripheral or
 central runtime flow depending on the configured role.
 
+For detailed role-specific internal diagrams and state machines, see
+[`BLE_STACK_FLOWCHARTS.md`](BLE_STACK_FLOWCHARTS.md).
+
 Common setup:
 
 1. `ble_stack_init()` brings up shared state, deferred events, controller
