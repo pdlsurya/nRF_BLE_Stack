@@ -1,13 +1,4 @@
-/**
- * @file radio_driver.c
- * @author Surya Poudel
- * @brief Radio peripheral driver for nRF
- * @version 0.1
- * @date 2026-03-27
- *
- * @copyright Copyright (c) 2026
- *
- */
+/* SPDX-License-Identifier: MIT */
 
 #include <stdint.h>
 #include "boards.h"

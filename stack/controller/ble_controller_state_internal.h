@@ -1,13 +1,4 @@
-/**
- * @file ble_controller_state_internal.h
- * @author Surya Poudel
- * @brief Controller-owned runtime state definitions for nRF BLE stack
- * @version 0.1
- * @date 2026-05-03
- *
- * @copyright Copyright (c) 2026
- *
- */
+/* SPDX-License-Identifier: MIT */
 
 #ifndef BLE_CONTROLLER_STATE_INTERNAL_H__
 #define BLE_CONTROLLER_STATE_INTERNAL_H__

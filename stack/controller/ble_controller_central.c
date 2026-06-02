@@ -1,13 +1,4 @@
-/**
- * @file ble_controller_central.c
- * @author Surya Poudel
- * @brief Central-role portions of the BLE controller implementation
- * @version 0.1
- * @date 2026-04-28
- *
- * @copyright Copyright (c) 2026
- *
- */
+/* SPDX-License-Identifier: MIT */
 
 #include "ble_controller_shared.h"
 

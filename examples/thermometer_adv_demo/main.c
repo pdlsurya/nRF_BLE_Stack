@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MIT */
+
 #include <stdint.h>
 
 #include "app_error.h"
@@ -23,16 +25,23 @@ static uint8_t m_temperature_c = 24U;
 static const int8_t m_adv_tx_power = 0x08;
 static const ble_uuid_t m_health_thermometer_service_uuid =
     BLE_UUID_SIG16_INIT(HEALTH_THERMOMETER_SERVICE_UUID);
+static const ble_gap_adv_service_uuid_list_config_t m_adv_service_uuid_lists[] = {
+    {
+        .type = BLE_GAP_ADV_SERVICE_UUID_LIST_COMPLETE_16,
+        .p_uuids = &m_health_thermometer_service_uuid,
+        .uuid_count = 1U,
+    },
+};
 static const ble_gap_adv_name_config_t m_adv_name = {
     .name_type = BLE_GAP_ADV_NAME_SHORT,
     .short_name_length = 8U,
 };
-static const ble_gap_service_data_t m_temperature_service_data = {
+static const ble_gap_adv_service_data_t m_temperature_service_data = {
     .uuid = BLE_UUID_SIG16_INIT(HEALTH_THERMOMETER_SERVICE_UUID),
     .p_data = &m_temperature_c,
     .data_len = sizeof(m_temperature_c),
 };
-static const ble_adv_config_t m_adv_config = {
+static const ble_gap_adv_config_t m_adv_config = {
     .flags = (uint8_t)(BLE_GAP_ADV_FLAG_LE_GENERAL_DISC_MODE |
                        BLE_GAP_ADV_FLAG_BR_EDR_NOT_SUPPORTED),
     .interval_ms = 100U,
@@ -40,7 +49,8 @@ static const ble_adv_config_t m_adv_config = {
     .adv_data = {
         .p_name = &m_adv_name,
         .p_tx_power = &m_adv_tx_power,
-        .p_service_uuid = &m_health_thermometer_service_uuid,
+        .p_service_uuid_lists = m_adv_service_uuid_lists,
+        .service_uuid_list_count = 1U,
         .p_service_data = &m_temperature_service_data,
     },
 };

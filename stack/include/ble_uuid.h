@@ -1,13 +1,4 @@
-/**
- * @file ble_uuid.h
- * @author Surya Poudel
- * @brief Shared public UUID definitions for nRF BLE stack
- * @version 0.1
- * @date 2026-04-29
- *
- * @copyright Copyright (c) 2026
- *
- */
+/* SPDX-License-Identifier: MIT */
 
 #ifndef BLE_UUID_H__
 #define BLE_UUID_H__

@@ -1,13 +1,4 @@
-/**
- * @file ble_runtime.c
- * @author Surya Poudel
- * @brief Shared runtime state, utilities, and deferred event dispatch for nRF BLE stack
- * @version 0.1
- * @date 2026-03-27
- *
- * @copyright Copyright (c) 2026
- *
- */
+/* SPDX-License-Identifier: MIT */
 
 #include "ble_runtime_internal.h"
 

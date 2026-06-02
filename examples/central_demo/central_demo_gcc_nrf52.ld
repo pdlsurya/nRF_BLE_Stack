@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MIT */
+
 /* Linker script to configure memory regions. */
 
 SEARCH_DIR(.)

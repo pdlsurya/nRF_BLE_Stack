@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 PROJECT_NAME     := peripheral_demo_pca10059
 TARGETS          := nrf52840_xxaa
 OUTPUT_DIRECTORY := _build
@@ -85,6 +87,7 @@ INC_FOLDERS += \
   $(BLE_STACK_DIR)/stack/include \
   $(BLE_STACK_DIR)/stack/core \
   $(BLE_STACK_DIR)/stack/controller \
+  $(BLE_STACK_DIR)/stack/host \
   $(BLE_STACK_DIR)/stack/host/gatt \
   $(BLE_STACK_DIR)/stack/host/l2cap \
   $(BLE_STACK_DIR)/stack/radio \

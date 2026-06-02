@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MIT */
+
 #ifndef USB_LOG_H
 #define USB_LOG_H
 

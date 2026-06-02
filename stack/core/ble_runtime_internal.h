@@ -1,13 +1,4 @@
-/**
- * @file ble_runtime_internal.h
- * @author Surya Poudel
- * @brief Internal runtime state and shared cross-layer definitions for nRF BLE stack
- * @version 0.1
- * @date 2026-03-27
- *
- * @copyright Copyright (c) 2026
- *
- */
+/* SPDX-License-Identifier: MIT */
 
 #ifndef BLE_RUNTIME_INTERNAL_H__
 #define BLE_RUNTIME_INTERNAL_H__
@@ -19,12 +10,12 @@
 #include "ble_gap.h"
 #include "ble_gatt_client.h"
 #include "ble_gatt_server.h"
+#include "ble_host_internal.h"
 #include "ble_l2cap_internal.h"
 #include "ble_controller_state_internal.h"
 #include "ble_ll_internal.h"
 #include "radio_driver.h"
 
-#define BLE_GAP_DEVICE_NAME_MAX_LEN 20U
 #define BLE_IDENTITY_SALT 0x434D535456324C39ULL
 #define BLE_EVT_IRQ_PRIORITY 6U
 #define BLE_EVT_QUEUE_SIZE 16U
@@ -126,54 +117,6 @@ typedef struct
     ble_link_pending_phy_update_t pending_phy_update;
 } ble_link_t;
 
-typedef struct
-{
-    char gap_device_name[BLE_GAP_DEVICE_NAME_MAX_LEN + 1U];
-    int8_t tx_power;
-    ble_gap_conn_params_t preferred_conn_params;
-    bool preferred_conn_params_valid;
-    uint8_t vendor_uuid_base[BLE_UUID128_LEN];
-    bool vendor_uuid_base_set;
-    uint8_t next_l2cap_sig_identifier;
-} ble_host_common_t;
-
-typedef struct
-{
-    bool name_present;
-    ble_gap_adv_name_config_t name;
-    bool tx_power_present;
-    int8_t tx_power;
-    bool service_uuid_present;
-    ble_uuid_t service_uuid;
-    bool service_data_present;
-    ble_gap_service_data_t service_data;
-    bool manufacturer_data_present;
-    ble_gap_manufacturer_data_t manufacturer_data;
-} ble_host_adv_data_t;
-
-typedef struct
-{
-    uint8_t flags;
-    uint16_t adv_interval_ms;
-    ble_gap_adv_type_t adv_type;
-    ble_host_adv_data_t adv_data;
-    ble_host_adv_data_t scan_response_data;
-    uint8_t service_count;
-} ble_host_peripheral_t;
-
-typedef struct
-{
-    ble_scan_config_t scan_config;
-} ble_host_central_t;
-
-typedef struct
-{
-    ble_gap_role_t configured_role;
-    ble_host_common_t common;
-    ble_host_peripheral_t peripheral;
-    ble_host_central_t central;
-} ble_host_t;
-
 typedef enum
 {
     BLE_DEFERRED_EVT_KIND_GAP = 0,
@@ -213,18 +156,12 @@ extern const uint8_t m_adv_access_address[4];
 extern const uint8_t m_data_channel_freq[37];
 extern const uint32_t m_ble_crc_poly;
 extern const uint32_t m_adv_crc_init;
-extern ble_host_t m_host;
 extern ble_link_t m_link;
 extern ble_gap_evt_handler_t m_gap_evt_handler;
 extern ble_gap_scan_report_handler_t m_scan_report_handler;
 extern ble_gatt_server_evt_handler_t m_gatt_server_evt_handler;
 extern ble_gatt_client_evt_handler_t m_gatt_client_evt_handler;
 extern ble_ctrl_runtime_t m_ctrl_rt;
-
-static inline bool ble_host_role_is_configured(ble_gap_role_t role)
-{
-    return m_host.configured_role == role;
-}
 
 uint16_t u16_decode(const uint8_t *p_src);
 void u16_encode(uint16_t value, uint8_t *p_dst);

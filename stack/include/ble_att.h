@@ -1,13 +1,4 @@
-/**
- * @file ble_att.h
- * @author Surya Poudel
- * @brief Public ATT definitions for nRF BLE stack
- * @version 0.1
- * @date 2026-05-01
- *
- * @copyright Copyright (c) 2026
- *
- */
+/* SPDX-License-Identifier: MIT */
 
 #ifndef BLE_ATT_H__
 #define BLE_ATT_H__

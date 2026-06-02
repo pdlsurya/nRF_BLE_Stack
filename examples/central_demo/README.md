@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: MIT -->
+
 # central_demo
 
 Minimal BLE central example for `nrf-ble-stack`.

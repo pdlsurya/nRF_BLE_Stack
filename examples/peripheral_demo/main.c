@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MIT */
+
 #include <stdint.h>
 #include <string.h>
 
@@ -51,6 +53,13 @@ static const uint8_t m_custom_uuid_base[BLE_UUID128_LEN] = {
 };
 static const ble_uuid_t m_custom_service_uuid = BLE_UUID_VENDOR16_INIT(0xFFF0U);
 static const int8_t m_adv_tx_power = 0x08;
+static const ble_gap_adv_service_uuid_list_config_t m_adv_service_uuid_lists[] = {
+    {
+        .type = BLE_GAP_ADV_SERVICE_UUID_LIST_COMPLETE_128,
+        .p_uuids = &m_custom_service_uuid,
+        .uuid_count = 1U,
+    },
+};
 static const ble_gap_adv_name_config_t m_adv_name = {
     .name_type = BLE_GAP_ADV_NAME_SHORT,
     .short_name_length = 4U,
@@ -68,12 +77,12 @@ static const uint8_t m_adv_manufacturer_data[] = {
     0x00U,
     0x00U,
 };
-static const ble_gap_service_data_t m_service_data = {
+static const ble_gap_adv_service_data_t m_service_data = {
     .uuid = BLE_UUID_VENDOR16_INIT(0xFFF0U),
     .p_data = m_adv_service_data,
     .data_len = sizeof(m_adv_service_data),
 };
-static const ble_gap_manufacturer_data_t m_manufacturer_data = {
+static const ble_gap_adv_manufacturer_data_t m_manufacturer_data = {
     .company_id = 0x0059U,
     .p_data = m_adv_manufacturer_data,
     .data_len = sizeof(m_adv_manufacturer_data),
@@ -84,7 +93,7 @@ static const ble_gap_conn_params_t m_gap_conn_params = {
     .slave_latency = 0U,
     .supervision_timeout_10ms = MS_TO_10MS_UNITS(1500U),
 };
-static const ble_adv_config_t m_adv_config = {
+static const ble_gap_adv_config_t m_adv_config = {
     .flags = (uint8_t)(BLE_GAP_ADV_FLAG_LE_GENERAL_DISC_MODE |
                        BLE_GAP_ADV_FLAG_BR_EDR_NOT_SUPPORTED),
     .interval_ms = 100U,
@@ -92,7 +101,8 @@ static const ble_adv_config_t m_adv_config = {
     .adv_data = {
         .p_name = &m_adv_name,
         .p_tx_power = &m_adv_tx_power,
-        .p_service_uuid = &m_custom_service_uuid,
+        .p_service_uuid_lists = m_adv_service_uuid_lists,
+        .service_uuid_list_count = 1U,
     },
     .scan_response_data = {
         .p_name = &m_scan_response_name,

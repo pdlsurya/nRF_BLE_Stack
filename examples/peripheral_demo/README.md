@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: MIT -->
+
 # peripheral_demo
 
 Example BLE peripheral application for `nrf-ble-stack`.
@@ -7,6 +9,8 @@ This example:
 - initializes the stack
 - configures GAP advertising and device name
 - registers a custom GATT service with a counter characteristic and a text characteristic
+- advertises the custom service UUID from a complete 128-bit service UUID list
+- places service data and manufacturer-specific data in the scan response
 - sends periodic notifications or indications while connected
 - logs GAP and GATT activity over USB CDC ACM
 

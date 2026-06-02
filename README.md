@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: MIT -->
+
 # nrf-ble-stack
 
 Minimal BLE stack for nRF52 series SoCs.
@@ -23,8 +25,8 @@ layers so packet flow is easy to follow in code.
 - nRF52 series support only
 - Peripheral and central role support
 - One role active at a time
-- Advertising with configurable name, flags, TX power, interval, service UUID,
-  service data, and manufacturer-specific data
+- Advertising with configurable name, flags, TX power, interval, service UUID
+  lists, service data, and manufacturer-specific data
 - Passive and active legacy scanning with scan report callbacks, optional
   auto-connect filter, and `scan_response` reporting
 - Legacy `SCAN_RSP` support with separate application-defined advertising and
@@ -68,6 +70,8 @@ layers so packet flow is easy to follow in code.
   Shared, central, and peripheral controller/link-layer implementation
 - `stack/include/ble_att.h`
   Public ATT size and MTU definitions
+- `stack/host/`
+  Internal host runtime state and GAP/L2CAP/GATT host submodules
 - `stack/host/gap/`
   GAP-facing host APIs
 - `stack/host/l2cap/`
@@ -333,10 +337,13 @@ Central flow:
 - The controller files own BLE packet flow, timing, and LL control handling.
 - The controller only accepts legacy `SCAN_REQ` and `CONNECT_REQ` packets whose
   advertiser address and `RxAdd` bit match the current advertising identity.
-- Optional name, TX power, service UUID, service data, and
+- Optional name, TX power, service UUID lists, service data, and
   manufacturer-specific data fields can be configured separately for the primary
   advertising packet and scan response. Fields that do not fit in the selected
   packet are omitted by the packet builder.
+- If a configured complete service UUID list does not fully fit, the packet
+  builder includes the UUIDs that fit and advertises that AD structure as an
+  incomplete list.
 - Connected event timing uses `TIMER0` compare scheduling and the nRF52840
   fixed PPI `RADIO ADDRESS -> TIMER0 CAPTURE[1]` path to re-anchor future
   events from the actual on-air receive timing.

@@ -1,13 +1,4 @@
-/**
- * @file ble_l2cap.c
- * @author Surya Poudel
- * @brief Internal L2CAP signaling helpers for the BLE stack
- * @version 0.1
- * @date 2026-05-01
- *
- * @copyright Copyright (c) 2026
- *
- */
+/* SPDX-License-Identifier: MIT */
 
 #include "ble_l2cap_internal.h"
 #include "ble_gatt_client_internal.h"

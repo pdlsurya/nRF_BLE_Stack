@@ -1,13 +1,4 @@
-/**
- * @file ble_gatt_client.c
- * @author Surya Poudel
- * @brief ATT and GATT client implementation for nRF BLE stack
- * @version 0.1
- * @date 2026-04-27
- *
- * @copyright Copyright (c) 2026
- *
- */
+/* SPDX-License-Identifier: MIT */
 
 #include "ble_runtime_internal.h"
 #include "ble_att_internal.h"

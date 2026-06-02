@@ -1,13 +1,4 @@
-/**
- * @file ble_gatt_server.c
- * @author Surya Poudel
- * @brief ATT and GATT server implementation for nRF BLE stack
- * @version 0.1
- * @date 2026-03-27
- *
- * @copyright Copyright (c) 2026
- *
- */
+/* SPDX-License-Identifier: MIT */
 
 #include "ble_gatt_server.h"
 
@@ -840,15 +831,14 @@ static bool gatt_build_custom_attrs(ble_gatt_service_t *p_services, uint8_t serv
 
 bool ble_gatt_server_init(ble_gatt_service_t *p_services, uint8_t service_count)
 {
-    const char *p_name = (m_host.common.gap_device_name[0] != '\0') ? m_host.common.gap_device_name : "nrf-ble";
+    const char *p_name = (m_host.common.local_device_name[0] != '\0') ? m_host.common.local_device_name : "nrf-ble";
     size_t name_len;
     uint8_t service_idx;
 
-    if (m_host.configured_role != BLE_GAP_ROLE_PERIPHERAL)
+    if (!ble_host_role_is_configured(BLE_GAP_ROLE_PERIPHERAL))
     {
         return false;
     }
-    m_host.peripheral.service_count = service_count;
     m_att_mtu = BLE_ATT_MTU_DEFAULT;
     m_gatt_db_count = 0U;
     m_char_runtime_count = 0U;

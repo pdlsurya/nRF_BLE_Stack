@@ -1,13 +1,4 @@
-/**
- * @file ble_gap.h
- * @author Surya Poudel
- * @brief Public GAP API for nRF BLE stack
- * @version 0.1
- * @date 2026-05-01
- *
- * @copyright Copyright (c) 2026
- *
- */
+/* SPDX-License-Identifier: MIT */
 
 #ifndef BLE_GAP_H__
 #define BLE_GAP_H__
@@ -43,6 +34,8 @@
 #define BLE_SCAN_WINDOW_MS_DEFAULT 50U
 #define BLE_GAP_ADV_DATA_MAX_LEN 31U
 #define BLE_GAP_ADV_FIELD_DATA_MAX_LEN 27U
+#define BLE_GAP_ADV_SERVICE_UUID_LIST_MAX_COUNT 4U
+#define BLE_GAP_ADV_SERVICE_UUID_PER_LIST_MAX_COUNT 8U
 #define BLE_GAP_SCAN_FILTER_NAME_MAX_LEN BLE_GAP_ADV_DATA_MAX_LEN
 
 #define MS_TO_1P25MS_UNITS(ms) \
@@ -61,6 +54,14 @@ typedef enum
     BLE_GAP_ADV_NAME_FULL = 0,
     BLE_GAP_ADV_NAME_SHORT
 } ble_gap_adv_name_type_t;
+
+typedef enum
+{
+    BLE_GAP_ADV_SERVICE_UUID_LIST_INCOMPLETE_16 = 0,
+    BLE_GAP_ADV_SERVICE_UUID_LIST_COMPLETE_16,
+    BLE_GAP_ADV_SERVICE_UUID_LIST_INCOMPLETE_128,
+    BLE_GAP_ADV_SERVICE_UUID_LIST_COMPLETE_128,
+} ble_gap_adv_service_uuid_list_type_t;
 
 typedef enum
 {
@@ -87,14 +88,14 @@ typedef struct
     ble_uuid_t uuid;
     const uint8_t *p_data;
     uint8_t data_len;
-} ble_gap_service_data_t;
+} ble_gap_adv_service_data_t;
 
 typedef struct
 {
     uint16_t company_id;
     const uint8_t *p_data;
     uint8_t data_len;
-} ble_gap_manufacturer_data_t;
+} ble_gap_adv_manufacturer_data_t;
 
 typedef struct
 {
@@ -104,11 +105,19 @@ typedef struct
 
 typedef struct
 {
+    ble_gap_adv_service_uuid_list_type_t type;
+    const ble_uuid_t *p_uuids;
+    uint8_t uuid_count;
+} ble_gap_adv_service_uuid_list_config_t;
+
+typedef struct
+{
     const ble_gap_adv_name_config_t *p_name;
     const int8_t *p_tx_power;
-    const ble_uuid_t *p_service_uuid;
-    const ble_gap_service_data_t *p_service_data;
-    const ble_gap_manufacturer_data_t *p_manufacturer_data;
+    const ble_gap_adv_service_uuid_list_config_t *p_service_uuid_lists;
+    uint8_t service_uuid_list_count;
+    const ble_gap_adv_service_data_t *p_service_data;
+    const ble_gap_adv_manufacturer_data_t *p_manufacturer_data;
 } ble_gap_adv_data_config_t;
 
 typedef struct
@@ -118,7 +127,7 @@ typedef struct
     ble_gap_adv_type_t adv_type;
     ble_gap_adv_data_config_t adv_data;
     ble_gap_adv_data_config_t scan_response_data;
-} ble_adv_config_t;
+} ble_gap_adv_config_t;
 
 typedef struct
 {
@@ -230,17 +239,17 @@ void ble_gap_register_scan_report_handler(ble_gap_scan_report_handler_t handler)
 /**
  * @brief Store advertising parameters used by ble_gap_start_advertising().
  *
- * Service data and manufacturer-specific data payload pointers are retained,
- * allowing the application to update those buffers between advertising events.
- * The pointed-to buffers must remain valid while the advertising configuration
- * is active.
+ * Advertising descriptors are copied during initialization. Service data and
+ * manufacturer-specific data payload pointers are retained, allowing the
+ * application to update those buffers between advertising events. The payload
+ * buffers must remain valid while the advertising configuration is active.
  *
  * @param[in] p_config Advertising configuration, or NULL for defaults.
  *
  * @retval true The advertising configuration was accepted.
  * @retval false The configuration is invalid.
  */
-bool ble_gap_adv_init(const ble_adv_config_t *p_config);
+bool ble_gap_adv_init(const ble_gap_adv_config_t *p_config);
 
 /**
  * @brief Store scanning parameters used by ble_gap_start_scanning().

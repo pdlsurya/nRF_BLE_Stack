@@ -1,13 +1,4 @@
-/**
- * @file ble_gatt_client_internal.h
- * @author Surya Poudel
- * @brief Internal GATT client entry points for nRF BLE stack
- * @version 0.1
- * @date 2026-05-01
- *
- * @copyright Copyright (c) 2026
- *
- */
+/* SPDX-License-Identifier: MIT */
 
 #ifndef BLE_GATT_CLIENT_INTERNAL_H__
 #define BLE_GATT_CLIENT_INTERNAL_H__

@@ -1,13 +1,4 @@
-/**
- * @file ble_ll_internal.h
- * @author Surya Poudel
- * @brief Shared internal link-layer packet types for nRF BLE stack
- * @version 0.1
- * @date 2026-04-29
- *
- * @copyright Copyright (c) 2026
- *
- */
+/* SPDX-License-Identifier: MIT */
 
 #ifndef BLE_LL_INTERNAL_H__
 #define BLE_LL_INTERNAL_H__

@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: MIT -->
+
 # BLE Stack Flowcharts
 
 This document describes the internal working flow of the stack itself:
@@ -15,6 +17,7 @@ Primary stack sources used:
 
 - `stack/core/ble_stack.c`
 - `stack/core/ble_runtime.c`
+- `stack/host/ble_host_internal.h`
 - `stack/host/gap/ble_gap.c`
 - `stack/controller/ble_controller_state_internal.h`
 - `stack/controller/ble_controller_common.c`
@@ -207,7 +210,7 @@ flowchart TD
     B --> C[Load static random identity address]
     C --> D[Init deferred event queue and SWI dispatcher]
     D --> E[Init controller runtime<br/>app_timer, adv timer, radio, TIMER0]
-    E --> F[ble_gap_adv_init]
+    E --> F[ble_gap_adv_init<br/>copy adv and scan-response config<br/>copy service UUID lists]
     F --> G[ble_gatt_server_init]
     G --> H[Build fixed and custom GATT attributes<br/>reset ATT MTU, CCCD state, indication-pending state]
     H --> I[ble_gap_start_advertising]
@@ -351,6 +354,14 @@ stateDiagram-v2
 ### Peripheral Internal Notes
 
 - Advertising-phase state is carried by `m_ctrl_rt.peripheral.adv_radio_phase`.
+- Advertising and scan-response configuration is stored in separate
+  `ble_host_adv_data_t` blocks. Name, TX power, and service UUID list metadata
+  are copied into host-owned storage during `ble_gap_adv_init()`.
+- Service data and manufacturer-specific data metadata are copied, but their
+  payload pointers remain application-owned so the application can update those
+  buffers between advertising events.
+- Complete service UUID lists are emitted as incomplete lists if only part of
+  the configured list fits in the selected legacy advertising packet.
 - Connected-phase radio state is shared with central through `m_ctrl_rt.conn.conn_radio_phase`, but the peripheral runs RX first and relies on `BCMATCH` to pre-stage the response.
 - Outbound server notifications and indications are not sent immediately on the API call. They are queued as ATT payloads and transmitted during the next connected connection event.
 - Indications use `m_indication_pending` as a gate. Another indication cannot be queued until `BLE_ATT_OP_HANDLE_VALUE_CONFIRMATION` is received.

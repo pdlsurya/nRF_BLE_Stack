@@ -1,13 +1,4 @@
-/**
- * @file ble_gap.c
- * @author Surya Poudel
- * @brief GAP-facing host API implementation for nRF BLE stack
- * @version 0.1
- * @date 2026-04-29
- *
- * @copyright Copyright (c) 2026
- *
- */
+/* SPDX-License-Identifier: MIT */
 
 #include "ble_runtime_internal.h"
 #include "ble_l2cap_internal.h"
@@ -75,7 +66,7 @@ void ble_gap_set_device_name(const char *p_name)
 {
     size_t name_len;
 
-    m_host.common.gap_device_name[0] = '\0';
+    m_host.common.local_device_name[0] = '\0';
 
     if (p_name == NULL)
     {
@@ -83,13 +74,13 @@ void ble_gap_set_device_name(const char *p_name)
     }
 
     name_len = strlen(p_name);
-    if (name_len > BLE_GAP_DEVICE_NAME_MAX_LEN)
+    if (name_len > BLE_HOST_LOCAL_DEVICE_NAME_MAX_LEN)
     {
-        name_len = BLE_GAP_DEVICE_NAME_MAX_LEN;
+        name_len = BLE_HOST_LOCAL_DEVICE_NAME_MAX_LEN;
     }
 
-    (void)memcpy(m_host.common.gap_device_name, p_name, name_len);
-    m_host.common.gap_device_name[name_len] = '\0';
+    (void)memcpy(m_host.common.local_device_name, p_name, name_len);
+    m_host.common.local_device_name[name_len] = '\0';
 }
 
 void ble_gap_set_conn_params(const ble_gap_conn_params_t *p_params)
@@ -219,6 +210,61 @@ static bool ble_gap_adv_type_is_supported(ble_gap_adv_type_t adv_type)
            (adv_type == BLE_GAP_ADV_TYPE_NONCONNECTABLE_SCANNABLE_UNDIRECTED);
 }
 
+static bool ble_gap_adv_service_uuid_list_type_is_supported(ble_gap_adv_service_uuid_list_type_t type)
+{
+    return (type == BLE_GAP_ADV_SERVICE_UUID_LIST_INCOMPLETE_16) ||
+           (type == BLE_GAP_ADV_SERVICE_UUID_LIST_COMPLETE_16) ||
+           (type == BLE_GAP_ADV_SERVICE_UUID_LIST_INCOMPLETE_128) ||
+           (type == BLE_GAP_ADV_SERVICE_UUID_LIST_COMPLETE_128);
+}
+
+static bool ble_gap_adv_service_uuid_lists_copy(const ble_gap_adv_data_config_t *p_src,
+                                                ble_host_adv_data_t *p_dst)
+{
+    uint8_t list_idx;
+    uint8_t uuid_idx;
+
+    if ((p_src == NULL) || (p_dst == NULL))
+    {
+        return false;
+    }
+
+    if (p_src->service_uuid_list_count == 0U)
+    {
+        return true;
+    }
+
+    if ((p_src->p_service_uuid_lists == NULL) ||
+        (p_src->service_uuid_list_count > BLE_GAP_ADV_SERVICE_UUID_LIST_MAX_COUNT))
+    {
+        return false;
+    }
+
+    for (list_idx = 0U; list_idx < p_src->service_uuid_list_count; list_idx++)
+    {
+        const ble_gap_adv_service_uuid_list_config_t *p_src_list = &p_src->p_service_uuid_lists[list_idx];
+
+        if (!ble_gap_adv_service_uuid_list_type_is_supported(p_src_list->type) ||
+            (p_src_list->uuid_count == 0U) ||
+            (p_src_list->uuid_count > BLE_GAP_ADV_SERVICE_UUID_PER_LIST_MAX_COUNT) ||
+            (p_src_list->p_uuids == NULL))
+        {
+            return false;
+        }
+
+        p_dst->service_uuid_lists[list_idx].type = p_src_list->type;
+        p_dst->service_uuid_lists[list_idx].uuid_count = p_src_list->uuid_count;
+
+        for (uuid_idx = 0U; uuid_idx < p_src_list->uuid_count; uuid_idx++)
+        {
+            p_dst->service_uuid_lists[list_idx].uuids[uuid_idx] = p_src_list->p_uuids[uuid_idx];
+        }
+    }
+
+    p_dst->service_uuid_list_count = p_src->service_uuid_list_count;
+    return true;
+}
+
 static bool ble_gap_adv_data_config_copy(const ble_gap_adv_data_config_t *p_src,
                                          ble_host_adv_data_t *p_dst)
 {
@@ -236,9 +282,9 @@ static bool ble_gap_adv_data_config_copy(const ble_gap_adv_data_config_t *p_src,
         {
             p_dst->name.name_type = BLE_GAP_ADV_NAME_FULL;
         }
-        if (p_dst->name.short_name_length > BLE_GAP_DEVICE_NAME_MAX_LEN)
+        if (p_dst->name.short_name_length > BLE_HOST_LOCAL_DEVICE_NAME_MAX_LEN)
         {
-            p_dst->name.short_name_length = BLE_GAP_DEVICE_NAME_MAX_LEN;
+            p_dst->name.short_name_length = BLE_HOST_LOCAL_DEVICE_NAME_MAX_LEN;
         }
         p_dst->name_present = true;
     }
@@ -249,10 +295,9 @@ static bool ble_gap_adv_data_config_copy(const ble_gap_adv_data_config_t *p_src,
         p_dst->tx_power_present = true;
     }
 
-    if (p_src->p_service_uuid != NULL)
+    if (!ble_gap_adv_service_uuid_lists_copy(p_src, p_dst))
     {
-        p_dst->service_uuid = *p_src->p_service_uuid;
-        p_dst->service_uuid_present = true;
+        return false;
     }
 
     if (p_src->p_service_data != NULL)
@@ -284,7 +329,7 @@ static bool ble_gap_adv_data_config_copy(const ble_gap_adv_data_config_t *p_src,
     return true;
 }
 
-bool ble_gap_adv_init(const ble_adv_config_t *p_config)
+bool ble_gap_adv_init(const ble_gap_adv_config_t *p_config)
 {
     ble_gap_adv_type_t adv_type;
     static const ble_gap_adv_name_config_t default_name = {
@@ -329,11 +374,6 @@ bool ble_gap_adv_init(const ble_adv_config_t *p_config)
                                  : (m_host.peripheral.scan_response_data.tx_power_present
                                         ? m_host.peripheral.scan_response_data.tx_power
                                         : 0);
-    m_host.peripheral.service_count =
-        (m_host.peripheral.adv_data.service_uuid_present ||
-         m_host.peripheral.scan_response_data.service_uuid_present)
-            ? 1U
-            : 0U;
     return true;
 }
 

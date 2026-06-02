@@ -1,13 +1,4 @@
-/**
- * @file ble_controller_peripheral.c
- * @author Surya Poudel
- * @brief Peripheral-role portions of the BLE controller implementation
- * @version 0.1
- * @date 2026-04-28
- *
- * @copyright Copyright (c) 2026
- *
- */
+/* SPDX-License-Identifier: MIT */
 
 #include "ble_controller_shared.h"
 
@@ -58,12 +49,12 @@ static void controller_peripheral_add_device_name_ad_structure(uint8_t *p_payloa
     uint8_t adv_name_len;
 
     if ((p_payload == NULL) || (p_data_len == NULL) || (p_name == NULL) ||
-        (m_host.common.gap_device_name[0] == '\0'))
+        (m_host.common.local_device_name[0] == '\0'))
     {
         return;
     }
 
-    full_name_len = strlen(m_host.common.gap_device_name);
+    full_name_len = strlen(m_host.common.local_device_name);
     if (p_name->name_type == BLE_GAP_ADV_NAME_SHORT)
     {
         adv_name_len = (p_name->short_name_length < full_name_len)
@@ -85,45 +76,117 @@ static void controller_peripheral_add_device_name_ad_structure(uint8_t *p_payloa
     (void)controller_peripheral_add_ad_structure(p_payload,
                                                 p_data_len,
                                                 ad_type,
-                                                (const uint8_t *)m_host.common.gap_device_name,
+                                                (const uint8_t *)m_host.common.local_device_name,
                                                 adv_name_len);
 }
 
-static void controller_peripheral_add_service_uuid_ad_structure(uint8_t *p_payload,
-                                                               uint8_t *p_data_len,
-                                                               const ble_uuid_t *p_uuid)
+static bool controller_peripheral_service_uuid_list_is_128_bit(ble_gap_adv_service_uuid_list_type_t type)
 {
-    uint16_t uuid_len;
-    uint8_t uuid_ad_type;
-    uint8_t uuid_bytes[BLE_UUID128_LEN];
+    return (type == BLE_GAP_ADV_SERVICE_UUID_LIST_INCOMPLETE_128) ||
+           (type == BLE_GAP_ADV_SERVICE_UUID_LIST_COMPLETE_128);
+}
 
-    if ((p_payload == NULL) || (p_data_len == NULL) || (p_uuid == NULL))
+static bool controller_peripheral_service_uuid_list_is_complete(ble_gap_adv_service_uuid_list_type_t type)
+{
+    return (type == BLE_GAP_ADV_SERVICE_UUID_LIST_COMPLETE_16) ||
+           (type == BLE_GAP_ADV_SERVICE_UUID_LIST_COMPLETE_128);
+}
+
+static uint8_t controller_peripheral_service_uuid_list_ad_type(ble_gap_adv_service_uuid_list_type_t type,
+                                                              bool complete)
+{
+    if (controller_peripheral_service_uuid_list_is_128_bit(type))
+    {
+        return complete ? BLE_AD_TYPE_COMPLETE_UUID128_LIST
+                        : BLE_AD_TYPE_INCOMPLETE_UUID128_LIST;
+    }
+
+    return complete ? BLE_AD_TYPE_COMPLETE_UUID16_LIST
+                    : BLE_AD_TYPE_INCOMPLETE_UUID16_LIST;
+}
+
+static void controller_peripheral_add_service_uuid_list_ad_structure(uint8_t *p_payload,
+                                                                     uint8_t *p_data_len,
+                                                                     const ble_host_adv_data_t *p_adv_data,
+                                                                     uint8_t list_idx)
+{
+    bool complete;
+    bool truncated = false;
+    uint8_t ad_type;
+    uint8_t uuid_data_len = 0U;
+    uint8_t uuid_idx;
+    uint8_t uuid_len;
+    uint8_t uuid_list_data[BLE_GAP_ADV_SERVICE_UUID_PER_LIST_MAX_COUNT * BLE_UUID128_LEN];
+    const ble_host_adv_service_uuid_list_t *p_uuid_list;
+
+    if ((p_payload == NULL) || (p_data_len == NULL) || (p_adv_data == NULL) ||
+        (list_idx >= p_adv_data->service_uuid_list_count))
     {
         return;
     }
 
-    uuid_len = ble_uuid_encoded_len(p_uuid);
-    if ((uuid_len != 0U) && ble_uuid_encode(p_uuid, uuid_bytes))
+    p_uuid_list = &p_adv_data->service_uuid_lists[list_idx];
+    complete = controller_peripheral_service_uuid_list_is_complete(p_uuid_list->type);
+    uuid_len = controller_peripheral_service_uuid_list_is_128_bit(p_uuid_list->type)
+                   ? BLE_UUID128_LEN
+                   : BLE_UUID16_LEN;
+
+    for (uuid_idx = 0U; uuid_idx < p_uuid_list->uuid_count; uuid_idx++)
     {
-        if (m_host.peripheral.service_count == 1)
+        if ((ble_uuid_encoded_len(&p_uuid_list->uuids[uuid_idx]) != uuid_len) ||
+            !ble_uuid_encode(&p_uuid_list->uuids[uuid_idx], &uuid_list_data[uuid_data_len]))
         {
-            uuid_ad_type = (uuid_len == BLE_UUID128_LEN)
-                               ? BLE_AD_TYPE_COMPLETE_UUID128_LIST
-                               : BLE_AD_TYPE_COMPLETE_UUID16_LIST;
+            truncated = true;
+            continue;
         }
-        else
+
+        if ((uint16_t)(*p_data_len) + (uint16_t)uuid_data_len + (uint16_t)uuid_len + 2U >
+            BLE_LL_ADV_DATA_MAX_LEN)
         {
-            uuid_ad_type = (uuid_len == BLE_UUID128_LEN)
-                               ? BLE_AD_TYPE_INCOMPLETE_UUID128_LIST
-                               : BLE_AD_TYPE_INCOMPLETE_UUID16_LIST;
+            truncated = true;
+            break;
         }
-        (void)controller_peripheral_add_ad_structure(p_payload, p_data_len, uuid_ad_type, uuid_bytes, (uint8_t)uuid_len);
+
+        uuid_data_len = (uint8_t)(uuid_data_len + uuid_len);
+    }
+
+    if (uuid_data_len == 0U)
+    {
+        return;
+    }
+
+    ad_type = controller_peripheral_service_uuid_list_ad_type(p_uuid_list->type,
+                                                             complete && !truncated);
+    (void)controller_peripheral_add_ad_structure(p_payload,
+                                                p_data_len,
+                                                ad_type,
+                                                uuid_list_data,
+                                                uuid_data_len);
+}
+
+static void controller_peripheral_add_service_uuid_list_ad_structures(uint8_t *p_payload,
+                                                                      uint8_t *p_data_len,
+                                                                      const ble_host_adv_data_t *p_adv_data)
+{
+    uint8_t list_idx;
+
+    if ((p_payload == NULL) || (p_data_len == NULL) || (p_adv_data == NULL))
+    {
+        return;
+    }
+
+    for (list_idx = 0U; list_idx < p_adv_data->service_uuid_list_count; list_idx++)
+    {
+        controller_peripheral_add_service_uuid_list_ad_structure(p_payload,
+                                                                 p_data_len,
+                                                                 p_adv_data,
+                                                                 list_idx);
     }
 }
 
 static void controller_peripheral_add_service_data_ad_structure(uint8_t *p_payload,
                                                                uint8_t *p_data_len,
-                                                               const ble_gap_service_data_t *p_service_data)
+                                                               const ble_gap_adv_service_data_t *p_service_data)
 {
     uint8_t uuid_bytes[BLE_UUID128_LEN];
     uint8_t service_data[BLE_UUID128_LEN + BLE_GAP_ADV_FIELD_DATA_MAX_LEN];
@@ -161,7 +224,7 @@ static void controller_peripheral_add_service_data_ad_structure(uint8_t *p_paylo
 
 static void controller_peripheral_add_manufacturer_data_ad_structure(uint8_t *p_payload,
                                                                      uint8_t *p_data_len,
-                                                                     const ble_gap_manufacturer_data_t *p_manufacturer_data)
+                                                                     const ble_gap_adv_manufacturer_data_t *p_manufacturer_data)
 {
     uint8_t manufacturer_data[sizeof(p_manufacturer_data->company_id) + BLE_GAP_ADV_FIELD_DATA_MAX_LEN];
 
@@ -214,9 +277,9 @@ static void controller_peripheral_add_adv_data_structures(uint8_t *p_payload,
     controller_peripheral_add_device_name_ad_structure(p_payload,
                                                        p_data_len,
                                                        p_adv_data->name_present ? &p_adv_data->name : NULL);
-    controller_peripheral_add_service_uuid_ad_structure(p_payload,
-                                                       p_data_len,
-                                                       p_adv_data->service_uuid_present ? &p_adv_data->service_uuid : NULL);
+    controller_peripheral_add_service_uuid_list_ad_structures(p_payload,
+                                                             p_data_len,
+                                                             p_adv_data);
     controller_peripheral_add_service_data_ad_structure(p_payload,
                                                        p_data_len,
                                                        p_adv_data->service_data_present ? &p_adv_data->service_data : NULL);
@@ -668,7 +731,7 @@ void controller_peripheral_handle_radio_event(radio_event_t evt, const ble_ll_ad
 
 void controller_peripheral_start_advertising_internal(void)
 {
-    if (m_host.configured_role != BLE_GAP_ROLE_PERIPHERAL)
+    if (!ble_host_role_is_configured(BLE_GAP_ROLE_PERIPHERAL))
     {
         return;
     }

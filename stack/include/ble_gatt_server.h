@@ -1,13 +1,4 @@
-/**
- * @file ble_gatt_server.h
- * @author Surya Poudel
- * @brief ATT and GATT server interface for nRF BLE stack
- * @version 0.1
- * @date 2026-03-27
- *
- * @copyright Copyright (c) 2026
- *
- */
+/* SPDX-License-Identifier: MIT */
 
 #ifndef BLE_GATT_SERVER_H__
 #define BLE_GATT_SERVER_H__

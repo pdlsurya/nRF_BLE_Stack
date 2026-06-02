@@ -1,13 +1,4 @@
-/**
- * @file ble_controller_common.c
- * @author Surya Poudel
- * @brief Shared BLE controller and link-layer implementation for nRF
- * @version 0.1
- * @date 2026-04-28
- *
- * @copyright Copyright (c) 2026
- *
- */
+/* SPDX-License-Identifier: MIT */
 
 #include "ble_controller_shared.h"
 #include "ble_l2cap_internal.h"
@@ -876,7 +867,7 @@ static void radio_evt_handler(radio_event_t evt)
         return;
     }
 
-    if ((m_host.configured_role == BLE_GAP_ROLE_CENTRAL) &&
+    if (ble_host_role_is_configured(BLE_GAP_ROLE_CENTRAL) &&
         (m_ctrl_rt.central.scan_radio_phase != BLE_SCAN_RADIO_PHASE_IDLE))
     {
         const ble_ll_adv_pdu_t *p_adv_rx = &m_ctrl_rt.central.adv_rx_pdu;

@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: MIT -->
+
 # thermometer_adv_demo
 
 Nonconnectable BLE advertising example for `nrf-ble-stack`.
@@ -6,7 +8,8 @@ This example:
 
 - initializes the stack in peripheral role
 - starts nonconnectable legacy advertising
-- advertises the Health Thermometer service UUID `0x1809`
+- advertises the Health Thermometer service UUID `0x1809` from a complete
+  16-bit service UUID list
 - includes service data with a single `uint8_t` temperature value
 - updates the application-owned service-data byte once per second
 - logs updates over USB CDC ACM

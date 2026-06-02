@@ -1,13 +1,4 @@
-/**
- * @file ble_controller_shared.h
- * @author Surya Poudel
- * @brief Shared internal definitions for split BLE controller implementation
- * @version 0.1
- * @date 2026-04-28
- *
- * @copyright Copyright (c) 2026
- *
- */
+/* SPDX-License-Identifier: MIT */
 
 #ifndef BLE_CONTROLLER_SHARED_H__
 #define BLE_CONTROLLER_SHARED_H__
